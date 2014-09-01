@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import socket, sys, os, urllib2, json, sqlite3, urllib, random
+import socket, sys, os, urllib2, json, sqlite3, urllib, random, imghdr, time
 from subprocess import Popen, PIPE
 from crontab import CronTab
 
@@ -7,7 +7,9 @@ server_address = './uds_socket'
 images_directory = 'pics'
 currentDirectory = os.getcwd()
 conn = None
+last = time.time()
 #TODO: change schema so no two urls or names can be the same
+#db schema   name url liked-default-0 seen-defalut-0 ignore-default-0
 
 # -----------------------------------------------
 # ----------------On Startup---------------------
@@ -27,9 +29,9 @@ def start():
         iter.next()
     except StopIteration:
         print 'making new cronjob'
-        job = cron.new(scriptDirectory + "/client.py next",
+        job = cron.new(scriptDirectory + "/client.py dailyUpdate",
             comment="desktop image crontab")
-        job.hour.every(1)
+        job.day.every(1)
         cron.write()
     #start socket
 
@@ -71,6 +73,16 @@ def makeDomainSocket():
 #------------------------------------------------
 #------------------Utility-----------------------
 #------------------------------------------------
+
+def pullPornImages(subreddit):
+    #TODO: handle flickr with beautiful soup
+    response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
+    data = json.load(response)
+    for child in data['data']['children']:
+        url = child['data']['url']
+        name = child['data']['subreddit_id'] + "-" +  child['data']['id']
+        downloadImage(url,name)
+
 def pullBingImages():
     print 'pullBingImages()'
     response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
@@ -80,18 +92,23 @@ def pullBingImages():
         name =  image['startdate']+ ".jpg"
         downloadImage(url, name)
 
+
 def downloadImage(url, name):
     cursor = conn.cursor()
     array = cursor.execute("select url from data where url=?", (url,)).fetchall()
     # we've seen this image before
     if len(array) != 0:
-        print "YU redownload!!!"
         return
     path = genrate_path(name)
     urllib.urlretrieve(url, path)
-    cursor.execute("INSERT INTO data VALUES (?, ?, ?, ?);",
-            (name, 0, url, 0))
-    conn.commit()
+    if imghdr.what(path) in ['jpg',  'jpeg', 'gif', 'png']:
+        cursor.execute("INSERT INTO data (name, url) VALUES (?, ?);",
+            (name, url))
+        conn.commit()
+    else:
+        cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
+            (name, url, 1))
+        os.unlink(path)
 
 def genrate_path(name):
     return images_directory +"/"+name
@@ -100,19 +117,27 @@ def genrate_path(name):
 # ----------------- Commands From Client----------------
 # ------------------------------------------------------
 def handle(command):
+    global last
     if command == "thumbsUp":
         thumbsUp(linux_getCurrentImageName())
     elif command == "thumbsDown":
         thumbsDown(linux_getCurrentImageName())
     elif command == "next":
         next()
+    elif command == "dailyUpdate":
+        if time.time() - last > 3600:
+            next()
+            last = time.time()
+
     else:
         print "command %s is not in the protocol" % command
 
 def next():
-    pullBingImages()
+    #pullBingImages()
+    for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
+        pullPornImages(subreddit)
     c = conn.cursor()
-    array = c.execute("select name, rowid from data where seen=0").fetchall()
+    array = c.execute("select name, rowid from data where seen=0 and ignore=0").fetchall()
     if len(array) == 0:
         print 'you have no fresh images :('
         return
