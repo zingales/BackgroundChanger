@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import socket, sys, os, urllib2, json, sqlite3, urllib, random, imghdr, time
+import socket, sys, os, urllib2, json, sqlite3, urllib, random, imghdr, time, traceback
 from subprocess import Popen, PIPE
 from crontab import CronTab
 
@@ -19,6 +19,9 @@ def start():
     global conn
     print 'connecting to db'
     conn = sqlite3.connect('/home/evan/Desktop/playground/Gshit/desktopPics.db')
+    c = conn.cursor()
+    c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, seen integer default 0, ignore integer default 0)')
+    conn.commit()
     sock = makeDomainSocket()
 
     #start cronjob
@@ -76,12 +79,18 @@ def makeDomainSocket():
 
 def pullPornImages(subreddit):
     #TODO: handle flickr with beautiful soup
-    response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
-    data = json.load(response)
-    for child in data['data']['children']:
-        url = child['data']['url']
-        name = child['data']['subreddit_id'] + "-" +  child['data']['id']
-        downloadImage(url,name)
+    url = 'Not Defined'
+    try:
+        response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
+        data = json.load(response)
+        for child in data['data']['children']:
+            url = child['data']['url']
+            name = child['data']['subreddit_id'] + "-" +  child['data']['id']
+            downloadImage(url,name)
+    except urllib2.HTTPError as e:
+        traceback.format_exc()
+        print url
+        print e.message
 
 def pullBingImages():
     print 'pullBingImages()'
@@ -100,15 +109,21 @@ def downloadImage(url, name):
     if len(array) != 0:
         return
     path = genrate_path(name)
-    urllib.urlretrieve(url, path)
-    if imghdr.what(path) in ['jpg',  'jpeg', 'gif', 'png']:
-        cursor.execute("INSERT INTO data (name, url) VALUES (?, ?);",
-            (name, url))
-        conn.commit()
-    else:
-        cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
-            (name, url, 1))
-        os.unlink(path)
+    try:
+        urllib.urlretrieve(url, path)
+        if imghdr.what(path) in ['jpg',  'jpeg', 'gif', 'png']:
+            cursor.execute("INSERT INTO data (name, url) VALUES (?, ?);",
+                (name, url))
+            conn.commit()
+        else:
+            cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
+                (name, url, 1))
+            os.unlink(path)
+    except (urlib.error.HTTPError, urlib.error.URLError) as e:
+        traceback.format_exc()
+        print url
+        print e
+
 
 def genrate_path(name):
     return images_directory +"/"+name
@@ -136,6 +151,7 @@ def next():
     #pullBingImages()
     for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
         pullPornImages(subreddit)
+    print 'pulled images'
     c = conn.cursor()
     array = c.execute("select name, rowid from data where seen=0 and ignore=0").fetchall()
     if len(array) == 0:
