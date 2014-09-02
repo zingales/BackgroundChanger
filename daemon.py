@@ -28,6 +28,7 @@ MAC_GET_COMMAND= ['/usr/bin/sqlite3', '/Users/G/Library/Application Support/Dock
 
 getDesktopImage = None
 setDesktopImage = None
+createCronJobs = None
 # ------------------------------------------------------
 # ----------------- OS specific ------------------------
 # ------------------------------------------------------
@@ -55,23 +56,60 @@ def linux_changeDesktopImage(imagePath):
     Popen(command)
 
 def windows_setDesktopImage(imagePath):
+    lastImage = imagePath
     SPI_SETDESKWALLPAPER = 20 
     windows_functions.windll.user32.SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, str(imagePath) , 0)
 
 def windows_getDesktopImage():
     return ""
 
+def windows_createCronJobs():
+    print "Sorry we don't currently create cron jobs programatically through python on windows," + 
+    " you'll need to make two task on that runs on boot (python daemon.py) and "+
+    "one that runs every day (python client.py dailyUpdate)"
+
+def unix_createCronJobs():
+    #start cronjob
+    cron_client = CronTab()
+    iter =  cron_client.find_comment("Desktop Image Changer client")
+    try:
+        print "Client Cron Task Found"
+        iter.next()
+    except StopIteration:
+        print 'Installing Client Cron Task'
+        job = cron_client.new(scriptDirectory + "/client.py dailyUpdate",
+            comment="Desktop Image Changer client")
+        job.every().dom()
+        cron_client.write()
+
+    cron_daemon = CronTab()
+    iter =  cron_daemon.find_comment("Desktop Image Changer daemon")
+    try:
+        print "Daemon Cron Task Found"
+        iter.next()
+    except StopIteration:
+        print 'Installing Daemon Cron Task'
+        job = cron_daemon.new(scriptDirectory + "/daemon.py &",
+            comment="Desktop Image Changer daemon")
+        job.every_reboot()
+        cron_daemon.write()
+
+
 if platform == "linux" or platform == "linux2":
     getDesktopImage = linux_getCurrentImageName
     setDesktopImage = linux_changeDesktopImage
+    createCronJobs = unix_createCronJobs
     print "Linux os detected"
 elif platform == "darwin":
     getDesktopImage = mac_getDesktopImage
     setDesktopImage = mac_setDesktopImage
+    createCronJobs = unix_createCronJobs
     print "Darwin os detected"
 elif platform == "win32":
     setDesktopImage = windows_setDesktopImage
     getDesktopImage = windows_getDesktopImage
+    createCronJobs = windows_createCronJobs
+
 else:
     print "os not supported"
     sys.exit(1)
@@ -93,7 +131,7 @@ def start():
     if not os.path.exists(dir_path):
         print "Created Image Directory: ", dir_path
         os.makedirs(dir_path)
-    #createCronJobs()
+    createCronJobs()
     
     #start socket
 
@@ -113,31 +151,7 @@ def start():
             # Clean up the connection
             connection.close()
 
-def createCronJobs():
-    #start cronjob
-    cron_client = CronTab(tabfile='lol.tab')
-    iter =  cron_client.find_comment("Desktop Image Changer client")
-    try:
-        print "Client Cron Task Found"
-        iter.next()
-    except StopIteration:
-        print 'Installing Client Cron Task'
-        job = cron_client.new(scriptDirectory + "/client.py dailyUpdate",
-            comment="Desktop Image Changer client")
-        job.every().dom()
-        cron_client.write()
 
-    cron_daemon = CronTab(tabfile='lol.tab')
-    iter =  cron_daemon.find_comment("Desktop Image Changer daemon")
-    try:
-        print "Daemon Cron Task Found"
-        iter.next()
-    except StopIteration:
-        print 'Installing Daemon Cron Task'
-        job = cron_daemon.new(scriptDirectory + "/daemon.py &",
-            comment="Desktop Image Changer daemon")
-        job.every_reboot()
-        cron_daemon.write()
 
 def makeDomainSocket():
     # Make sure the socket does not already exist
