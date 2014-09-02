@@ -237,8 +237,7 @@ def handle(command):
 
 def next():
     #pullBingImages()
-    # for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
-    for subreddit in ['waterporn']:
+    for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
         pullPornImages(subreddit)
     print 'Done Pulling Images'
     c = conn.cursor()

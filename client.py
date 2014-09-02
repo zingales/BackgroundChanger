@@ -6,7 +6,7 @@ import os
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 # socket_address = scriptDirectory + '/uds_socket'
 socket_address = ('localhost', 8888)
-print socket_address
+
 def sendMessage(message):
     # Create a UDS socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
