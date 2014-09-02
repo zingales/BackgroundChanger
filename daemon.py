@@ -2,14 +2,66 @@
 import socket, sys, os, urllib2, json, sqlite3, urllib, random, imghdr, time, traceback
 from subprocess import Popen, PIPE
 from crontab import CronTab
+from sys import platform
 
-server_address = './uds_socket'
-images_directory = 'pics'
-currentDirectory = os.getcwd()
+scriptDirectory = os.path.dirname(os.path.realpath(__file__))
+server_address = scriptDirectory + '/uds_socket'
+images_directory = '/pics'
+
 conn = None
 last = time.time()
 #TODO: change schema so no two urls or names can be the same
 #db schema   name url liked-default-0 seen-defalut-0 ignore-default-0
+
+#requires crontab
+
+MAC_SET_SCRIPT = '''/usr/bin/sqlite3 /Users/G/Library/Application\ Support/Dock/desktoppicture.db<<END
+UPDATE data SET value="%s" WHERE ROWID=2;
+END
+killall Dock'''
+
+MAC_GET_COMMAND= ['/usr/bin/sqlite3', '/Users/G/Library/Application Support/Dock/desktoppicture.db', 'select * from data where rowid=2']
+
+
+getDesktopImage = None
+setDesktopImage = None
+# ------------------------------------------------------
+# ----------------- OS specific ------------------------
+# ------------------------------------------------------
+
+def mac_setDesktopImage(imagePath):
+    Popen(MAC_SET_SCRIPT%imagePath, shell=True)
+
+def mac_getDesktopImage():
+    p = Popen(MAC_GET_COMMAND, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    uri, _ =  p.communicate()
+    name = uri.rstrip().split("/")[-1]
+    return name
+
+def linux_getCurrentImageName():
+    command ="gsettings get org.gnome.desktop.background picture-uri".split(" ")
+    p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    uri, _ =  p.communicate()
+    name = uri.rstrip().split("/")[-1][:-1]
+    return name
+    #uri is of the form file:///path/to/file
+
+def linux_changeDesktopImage(imagePath):
+    command = "gsettings set org.gnome.desktop.background picture-uri file://%s" % imagePath
+    command = command.split(" ")
+    Popen(command)
+
+if platform == "linux" or platform == "linux2":
+    getDesktopImage = linux_getCurrentImageName
+    setDesktopImage = linux_changeDesktopImage
+    print "Linux os detected"
+elif platform == "darwin":
+    getDesktopImage = mac_getDesktopImage
+    setDesktopImage = mac_setDesktopImage
+    print "Darwin os detected"
+elif platform == "win32":
+    print "windows not supported"
+    sys.exit(1)
 
 # -----------------------------------------------
 # ----------------On Startup---------------------
@@ -17,25 +69,38 @@ last = time.time()
 def start():
     #connect to db
     global conn
-    print 'connecting to db'
-    conn = sqlite3.connect('/home/evan/Desktop/playground/Gshit/desktopPics.db')
+    print 'Connecting To Pics DB'
+    conn = sqlite3.connect(scriptDirectory+'/desktopPics.db')
     c = conn.cursor()
     c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, seen integer default 0, ignore integer default 0)')
     conn.commit()
     sock = makeDomainSocket()
 
     #start cronjob
-    cron = CronTab()
-    scriptDirectory = os.path.dirname(os.path.realpath(__file__))
-    iter =  cron.find_comment("desktop image crontab")
+    cron_client = CronTab()
+    iter =  cron_client.find_comment("Desktop Image Changer client")
     try:
+        print "Client Cron Task Found"
         iter.next()
     except StopIteration:
-        print 'making new cronjob'
-        job = cron.new(scriptDirectory + "/client.py dailyUpdate",
-            comment="desktop image crontab")
-        job.day.every(1)
-        cron.write()
+        print 'Installing Client Cron Task'
+        job = cron_client.new(scriptDirectory + "/client.py dailyUpdate",
+            comment="Desktop Image Changer client")
+        job.every().dom()
+        cron_client.write()
+
+    cron_daemon = CronTab()
+    iter =  cron_daemon.find_comment("Desktop Image Changer daemon")
+    try:
+        print "Daemon Cron Task Found"
+        iter.next()
+    except StopIteration:
+        print 'Installing Daemon Cron Task'
+        job = cron_daemon.new(scriptDirectory + "/daemon.py &",
+            comment="Desktop Image Changer daemon")
+        job.every_reboot()
+        cron_daemon.write()
+
     #start socket
 
     while True:
@@ -66,7 +131,7 @@ def makeDomainSocket():
     # Create a UDS socket
     sock =  socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     # Bind the socket to the port
-    print 'starting up on %s' % server_address
+    print 'Starting up socket listner at %s' % server_address
     sock.bind(server_address)
 
     sock.listen(1)
@@ -79,7 +144,8 @@ def makeDomainSocket():
 
 def pullPornImages(subreddit):
     #TODO: handle flickr with beautiful soup
-    url = 'Not Defined'
+    print "Pulling from ", subreddit
+    url = 'failed pulling from subreddit'
     try:
         response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
         data = json.load(response)
@@ -93,7 +159,7 @@ def pullPornImages(subreddit):
         print e.message
 
 def pullBingImages():
-    print 'pullBingImages()'
+    print 'Pulling from bing'
     response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
     data = json.load(response)
     for image in data['images']:
@@ -126,7 +192,7 @@ def downloadImage(url, name):
 
 
 def genrate_path(name):
-    return images_directory +"/"+name
+    return scriptDirectory + images_directory +"/"+name
 
 # ------------------------------------------------------
 # ----------------- Commands From Client----------------
@@ -134,16 +200,15 @@ def genrate_path(name):
 def handle(command):
     global last
     if command == "thumbsUp":
-        thumbsUp(linux_getCurrentImageName())
+        thumbsUp(getDesktopImage())
     elif command == "thumbsDown":
-        thumbsDown(linux_getCurrentImageName())
+        thumbsDown(getDesktopImage())
     elif command == "next":
         next()
     elif command == "dailyUpdate":
         if time.time() - last > 3600:
             next()
             last = time.time()
-
     else:
         print "command %s is not in the protocol" % command
 
@@ -162,7 +227,7 @@ def next():
     c.execute("update data set seen=1 where rowid=?", (id,))
     conn.commit()
     path = genrate_path(name)
-    linux_changeDesktopImage(path)
+    setDesktopImage(path)
 
 def thumbsDown(imageName):
     c = conn.cursor()
@@ -176,26 +241,9 @@ def thumbsUp(imageName):
     conn.commit()
 
 
-# ------------------------------------------------------
-# ----------------- OS specific ------------------------
-# ------------------------------------------------------
-def linux_getCurrentImageName():
-    command ="gsettings get org.gnome.desktop.background picture-uri".split(" ")
-    p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    uri, _ =  p.communicate()
-    name = uri.rstrip().split("/")[-1][:-1]
-    return name
-    #uri is of the form file:///path/to/file
 
-def linux_changeDesktopImage(imagePath):
-    imagePath = currentDirectory + "/" + imagePath
-    command = "gsettings set org.gnome.desktop.background picture-uri file://%s" % imagePath
-    command = command.split(" ")
-    Popen(command)
-
-
-def main():
-    start()
 
 if __name__ == "__main__":
     start()
+    # path = "/Users/G/Pictures/Desktop/tree.jpg"
+    # set_desktop_background(path)
