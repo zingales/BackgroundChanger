@@ -4,14 +4,16 @@
 Desktop Images Updater
 =====================
 
-Currently pulls from Cloud/Water/Fire/Earthporn subreddits, and Bing Images of the day
+Sets your desktop background from images pulled from the internet. 
+Currently pulls images from Cloud/Water/Fire/Earthporn subreddits, and Bing Images of the day.
 
 Requires
 ===========
-sqlite3
-python-crontab 
+sqlite3 \n
+python 2 \n
+python-crontab \n
 
-install
+Install
 ==============
 is hella easy, just run "./daemon.py &" it will add cron jobs such that it will start on boot, 
 and update images everyday
