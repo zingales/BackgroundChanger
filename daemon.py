@@ -15,6 +15,12 @@ conn = None
 last = time.time()
 #TODO: change schema so no two urls or names can be the same
 #db schema   name url liked-default-0 seen-defalut-0 ignore-default-0
+# seen is the priority of when you want to see it, it will shows images with seen =0 before, seen=1
+# 5 means that you've already displayed it. 
+
+#TODO: update the database so seen is priority
+#TODO: save images with the correct file extension
+#TODO: change os importing, such that you don't need libraries that you don't need. 
 
 #requires crontab
 
@@ -185,24 +191,24 @@ def pullPornImages(subreddit):
         for child in data['data']['children']:
             url = child['data']['url']
             name = child['data']['subreddit_id'] + "-" +  child['data']['id']
-            downloadImage(url,name)
+            downloadImage(url,name, 0)
     except urllib2.HTTPError as e:
         traceback.format_exc()
         print url
         print e.message
 
 def pullBingImages():
-    print 'Pulling from bing'
+    print 'Pulling from Bing image of the day'
     response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
     data = json.load(response)
     for image in data['images']:
         url = 'http://www.bing.com' + image['url']
         name =  image['startdate']+ ".jpg"
-        downloadImage(url, name)
+        downloadImage(url, name,1)
 
 
-def downloadImage(url, name):
-    #super hack
+def downloadImage(url, name, priority):
+    #super hack windows needs an image file extension. 
     name += ".jpg"
     cursor = conn.cursor()
     array = cursor.execute("select url from data where url=?", (url,)).fetchall()
@@ -213,8 +219,8 @@ def downloadImage(url, name):
     try:
         urllib.urlretrieve(url, path)
         if imghdr.what(path) in ['jpg',  'jpeg', 'gif', 'png']:
-            cursor.execute("INSERT INTO data (name, url) VALUES (?, ?);",
-                (name, url))
+            cursor.execute("INSERT INTO data (name, url, seen) VALUES (?, ?, ?);",
+                (name, url, priority))
             conn.commit()
         else:
             cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
@@ -250,18 +256,21 @@ def handle(command):
         print "command %s is not in the protocol" % command
 
 def next():
-    #pullBingImages()
+    pullBingImages()
     for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
         pullPornImages(subreddit)
     print 'Done Pulling Images'
     c = conn.cursor()
-    array = c.execute("select name, rowid from data where seen=0 and ignore=0").fetchall()
-    if len(array) == 0:
-        print 'you have no fresh images :('
-        return
+    array = []
+    count = 0
+    while len(array) == 0:
+        array = c.execute("select name, rowid from data where seen=? and ignore=0", (count,)).fetchall()
+        count+=1
+    if count > 5:
+        print "you have no fresh images"
     selected = random.choice(array)
     name, id = selected
-    c.execute("update data set seen=1 where rowid=?", (id,))
+    c.execute("update data set seen=5 where rowid=?", (id,))
     conn.commit()
     path = genrate_path(name)
     setDesktopImage(path)
