@@ -14,13 +14,12 @@ images_directory = 'pics'
 conn = None
 last = time.time()
 #TODO: change schema so no two urls or names can be the same
-#db schema   name url liked-default-0 seen-defalut-0 ignore-default-0
-# seen is the priority of when you want to see it, it will shows images with seen =0 before, seen=1
-# 5 means that you've already displayed it. 
+#db schema   name url liked-default-0 priority-defalut-0 ignore-default-0
+# priority is the priority of when you want to see it, it will shows images with priority =0 before, priority=1
+# 5 means that you've already displayed it.
 
-#TODO: update the database so seen is priority
 #TODO: save images with the correct file extension
-#TODO: change os importing, such that you don't need libraries that you don't need. 
+#TODO: change os importing, such that you don't need libraries that you don't need.
 
 #requires crontab
 
@@ -63,15 +62,15 @@ def linux_changeDesktopImage(imagePath):
 
 def windows_setDesktopImage(imagePath):
     lastImage = imagePath
-    SPI_SETDESKWALLPAPER = 20 
+    SPI_SETDESKWALLPAPER = 20
     windows_functions.windll.user32.SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, str(imagePath) , 0)
 
 def windows_getDesktopImage():
     return ""
 
 def windows_createCronJobs():
-    print "Sorry we don't currently create cron jobs programatically through python on windows," + 
-    " you'll need to make two task on that runs on boot (python daemon.py) and "+
+    print "Sorry we don't currently create cron jobs programatically through python on windows," + \
+    " you'll need to make two task on that runs on boot (python daemon.py) and "+ \
     "one that runs every day (python client.py dailyUpdate)"
 
 def unix_createCronJobs():
@@ -129,7 +128,7 @@ def start():
     print 'Connecting To Pics DB'
     conn = sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
     c = conn.cursor()
-    c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, seen integer default 0, ignore integer default 0)')
+    c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
     conn.commit()
     sock = makeDomainSocket()
 
@@ -138,7 +137,7 @@ def start():
         print "Created Image Directory: ", dir_path
         os.makedirs(dir_path)
     createCronJobs()
-    
+
     #start socket
 
     while True:
@@ -203,13 +202,11 @@ def pullBingImages():
     data = json.load(response)
     for image in data['images']:
         url = 'http://www.bing.com' + image['url']
-        name =  image['startdate']+ ".jpg"
-        downloadImage(url, name,1)
+        name =  image['startdate']
+        downloadImage(url, name, 1)
 
 
 def downloadImage(url, name, priority):
-    #super hack windows needs an image file extension. 
-    name += ".jpg"
     cursor = conn.cursor()
     array = cursor.execute("select url from data where url=?", (url,)).fetchall()
     # we've seen this image before
@@ -218,9 +215,11 @@ def downloadImage(url, name, priority):
     path = genrate_path(name)
     try:
         urllib.urlretrieve(url, path)
-        if imghdr.what(path) in ['jpg',  'jpeg', 'gif', 'png']:
-            cursor.execute("INSERT INTO data (name, url, seen) VALUES (?, ?, ?);",
-                (name, url, priority))
+        fileExtension = imghdr.what(path)
+        if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
+            os.rename(path, path+'.'+fileExtension)
+            cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
+                (name + '.' + fileExtension, url, priority))
             conn.commit()
         else:
             cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
@@ -230,7 +229,7 @@ def downloadImage(url, name, priority):
     except Exception as e:
         print "Exceptino was thrown", e, url
         traceback.format_exc()
-        
+
 
 def genrate_path(name):
     return join_path(scriptDirectory, images_directory, name)
@@ -264,20 +263,20 @@ def next():
     array = []
     count = 0
     while len(array) == 0:
-        array = c.execute("select name, rowid from data where seen=? and ignore=0", (count,)).fetchall()
+        array = c.execute("select name, rowid from data where priority=? and ignore=0", (count,)).fetchall()
         count+=1
     if count > 5:
         print "you have no fresh images"
     selected = random.choice(array)
     name, id = selected
-    c.execute("update data set seen=5 where rowid=?", (id,))
+    c.execute("update data set priority=5 where rowid=?", (id,))
     conn.commit()
     path = genrate_path(name)
     setDesktopImage(path)
 
 def thumbsDown(imageName):
     c = conn.cursor()
-    c.execute("update data set liked=-1 where name=?",(imageName,))
+    c.execute("update data set liked=-1,priority=99 where name=?",(imageName,))
     conn.commit()
     next()
 

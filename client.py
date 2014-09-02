@@ -2,6 +2,7 @@
 import socket
 import sys
 import os
+from subprocess import Popen
 
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 # socket_address = scriptDirectory + '/uds_socket'
@@ -26,8 +27,17 @@ def sendMessage(message):
     finally:
         sock.close()
 
+def handle(command):
+    #TODO: check if client already started
+    #TODO: figure out why you have to press enter every time for new line
+    if command == "start":
+        import daemon
+        from os.path import join as join_path
+        Popen(('python %s &' %  join_path(scriptDirectory, 'daemon.py')).split(' '))
+    else:
+        sendMessage(command)
 def main():
-    sendMessage(sys.argv[1])
+    handle(sys.argv[1])
 
 if __name__ == "__main__":
     main()
