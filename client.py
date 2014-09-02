@@ -4,14 +4,15 @@ import sys
 import os
 
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
-socket_address = scriptDirectory + '/uds_socket'
+# socket_address = scriptDirectory + '/uds_socket'
+socket_address = ('localhost', 8888)
 print socket_address
 def sendMessage(message):
     # Create a UDS socket
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # Connect the socket to the port where the server is listening
-    print 'connecting to %s' % socket_address
+    print 'connecting to %s, %s' % socket_address
     try:
         sock.connect(socket_address)
     except socket.error, msg:
