@@ -9,9 +9,10 @@ Currently pulls images from Cloud/Water/Fire/Earthporn subreddits, and Bing Imag
 
 Requires
 ===========
-sqlite3 \n
-python 2 \n
-python-crontab \n
+* sqlite3
+* python 2
+* python-crontab
+
 
 Install
 ==============
