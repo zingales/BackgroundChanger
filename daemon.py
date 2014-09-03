@@ -69,9 +69,14 @@ def windows_getDesktopImage():
     return ""
 
 def windows_createCronJobs():
-    print "Sorry we don't currently create cron jobs programatically through python on windows," + \
-    " you'll need to make two task on that runs on boot (python daemon.py) and "+ \
-    "one that runs every day (python client.py dailyUpdate)"
+    if not os.path.exists(join_path(scriptDirectory, 'client.bat')):
+        print "Generating client.bat, please schedule a daily task for this batch file"
+        with open('client.bat', 'w') as f:
+            f.write("python "+join_path(scriptDirectory, 'client.py') +" dailyUpdate")
+    if not os.path.exists(join_path(scriptDirectory, 'daemon.bat')):
+        print "Generating daemon.bat, please schedule a task to run on boot for this batch file"
+        with open('daemon.bat', 'w') as f:
+            f.write("start /B python "+join_path(scriptDirectory, 'client.py') +" dailyUpdate")
 
 def unix_createCronJobs():
     #start cronjob
