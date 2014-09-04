@@ -1,18 +1,16 @@
 #!/usr/bin/python
 import socket, sys, os, urllib, urllib2, json, sqlite3, random, imghdr, time, traceback
-from subprocess import Popen, PIPE
-from crontab import CronTab
-from sys import platform
 from os.path import join as join_path
-import ctypes as windows_functions
+import os_specific 
 
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 # server_address = scriptDirectory + 'uds_socket'
 server_address = ('localhost', 8888)
 images_directory = 'pics'
 
+
 conn = None
-last = time.time()
+last = time.time()-3600
 #TODO: change schema so no two urls or names can be the same
 #db schema   name url liked-default-0 priority-defalut-0 ignore-default-0
 # priority is the priority of when you want to see it, it will shows images with priority =0 before, priority=1
@@ -23,106 +21,9 @@ last = time.time()
 
 #requires crontab
 
-MAC_SET_SCRIPT = '''/usr/bin/sqlite3 /Users/G/Library/Application\ Support/Dock/desktoppicture.db<<END
-UPDATE data SET value="%s" WHERE ROWID=2;
-END
-killall Dock'''
 
-MAC_GET_COMMAND= ['/usr/bin/sqlite3', '/Users/G/Library/Application Support/Dock/desktoppicture.db', 'select * from data where rowid=2']
+(getDesktopImage, setDesktopImage, createCronJobs, asynch_start) = os_specific.load()
 
-
-getDesktopImage = None
-setDesktopImage = None
-createCronJobs = None
-# ------------------------------------------------------
-# ----------------- OS specific ------------------------
-# ------------------------------------------------------
-
-def mac_setDesktopImage(imagePath):
-    Popen(MAC_SET_SCRIPT%imagePath, shell=True)
-
-def mac_getDesktopImage():
-    p = Popen(MAC_GET_COMMAND, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    uri, _ =  p.communicate()
-    name = uri.rstrip().split("/")[-1]
-    return name
-
-def linux_getCurrentImageName():
-    command ="gsettings get org.gnome.desktop.background picture-uri".split(" ")
-    p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    uri, _ =  p.communicate()
-    name = uri.rstrip().split("/")[-1][:-1]
-    return name
-    #uri is of the form file:///path/to/file
-
-def linux_changeDesktopImage(imagePath):
-    command = "gsettings set org.gnome.desktop.background picture-uri file://%s" % imagePath
-    command = command.split(" ")
-    Popen(command)
-
-def windows_setDesktopImage(imagePath):
-    lastImage = imagePath
-    SPI_SETDESKWALLPAPER = 20
-    windows_functions.windll.user32.SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, str(imagePath) , 0)
-
-def windows_getDesktopImage():
-    return ""
-
-def windows_createCronJobs():
-    if not os.path.exists(join_path(scriptDirectory, 'client.bat')):
-        print "Generating client.bat, please schedule a daily task for this batch file"
-        with open('client.bat', 'w') as f:
-            f.write("python "+join_path(scriptDirectory, 'client.py') +" dailyUpdate")
-    if not os.path.exists(join_path(scriptDirectory, 'daemon.bat')):
-        print "Generating daemon.bat, please schedule a task to run on boot for this batch file"
-        with open('daemon.bat', 'w') as f:
-            f.write("start /B python "+join_path(scriptDirectory, 'client.py') +" dailyUpdate")
-
-def unix_createCronJobs():
-    #start cronjob
-    cron_client = CronTab()
-    iter =  cron_client.find_comment("Desktop Image Changer client")
-    try:
-        print "Client Cron Task Found"
-        iter.next()
-    except StopIteration:
-        print 'Installing Client Cron Task'
-        job = cron_client.new(scriptDirectory + "/client.py dailyUpdate",
-            comment="Desktop Image Changer client")
-        job.every().dom()
-        cron_client.write()
-
-    cron_daemon = CronTab()
-    iter =  cron_daemon.find_comment("Desktop Image Changer daemon")
-    try:
-        print "Daemon Cron Task Found"
-        iter.next()
-    except StopIteration:
-        print 'Installing Daemon Cron Task'
-        job = cron_daemon.new(scriptDirectory + "/daemon.py &",
-            comment="Desktop Image Changer daemon")
-        job.every_reboot()
-        cron_daemon.write()
-
-
-if platform == "linux" or platform == "linux2":
-    getDesktopImage = linux_getCurrentImageName
-    setDesktopImage = linux_changeDesktopImage
-    createCronJobs = unix_createCronJobs
-    print "Linux os detected"
-elif platform == "darwin":
-    getDesktopImage = mac_getDesktopImage
-    setDesktopImage = mac_setDesktopImage
-    createCronJobs = unix_createCronJobs
-    print "Darwin os detected"
-elif platform == "win32":
-    setDesktopImage = windows_setDesktopImage
-    getDesktopImage = windows_getDesktopImage
-    createCronJobs = windows_createCronJobs
-
-else:
-    print "os not supported"
-    sys.exit(1)
 
 # -----------------------------------------------
 # ----------------On Startup---------------------
@@ -188,27 +89,32 @@ def makeDomainSocket():
 def pullPornImages(subreddit):
     #TODO: handle flickr with beautiful soup
     print "Pulling from ", subreddit
-    url = 'failed pulling from subreddit'
+    url = 'failed on subreddit url'
     try:
         response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
         data = json.load(response)
         for child in data['data']['children']:
             url = child['data']['url']
             name = child['data']['subreddit_id'] + "-" +  child['data']['id']
-            downloadImage(url,name, 0)
-    except urllib2.HTTPError as e:
-        traceback.format_exc()
+            downloadImage(url,name, 1)
+    except (urllib2.HTTPError, urllib2.URLError) as e:
+        # traceback.format_exc()
         print url
-        print e.message
+        # print e.message
 
 def pullBingImages():
     print 'Pulling from Bing image of the day'
-    response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
-    data = json.load(response)
-    for image in data['images']:
-        url = 'http://www.bing.com' + image['url']
-        name =  image['startdate']
-        downloadImage(url, name, 1)
+    url =  'failed on bing url'
+    try:
+        response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
+        data = json.load(response)
+        for image in data['images']:
+            url = 'http://www.bing.com' + image['url']
+            name =  image['startdate']
+            downloadImage(url, name, 0)
+    except (urllib2.HTTPError, urllib2.URLError) as e:
+        print "Exception was thrown", e, url
+        # traceback.format_exc()
 
 
 def downloadImage(url, name, priority):
@@ -232,7 +138,7 @@ def downloadImage(url, name, priority):
             os.unlink(path)
     # except (urllib.error.HTTPError, urllib.error.URLError) as e:
     except Exception as e:
-        print "Exceptino was thrown", e, url
+        print "Exception was thrown", e, url
         traceback.format_exc()
 
 
@@ -252,8 +158,11 @@ def handle(command):
         next()
     elif command == "dailyUpdate":
         if time.time() - last > 3600:
+            print "Running dailyUpdate at ", time.time()
             next()
             last = time.time()
+        else:
+            print "daily update watinging till", 3600-(time.time()-last), "seconds" 
     elif command == "quit":
         sys.exit(0)
     else:
@@ -277,6 +186,7 @@ def next():
     c.execute("update data set priority=5 where rowid=?", (id,))
     conn.commit()
     path = genrate_path(name)
+    print "changing image"
     setDesktopImage(path)
 
 def thumbsDown(imageName):
