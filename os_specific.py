@@ -2,13 +2,15 @@ import os
 from sys import platform
 from os.path import join as join_path
 from subprocess import Popen, PIPE
+import logging
 
 scriptPath = os.path.dirname(os.path.realpath(__file__))
+log = logging.getLogger(__name__)
 
 def load():
 
 	if platform == "darwin":
-		print "Darwin os detected"
+		log.info("Darwin os detected")
 		luanchdPath = os.path.expanduser("~/Library/LaunchAgents")
 		#----------------------------------------------
 		#-----------------MAC--------------------------
@@ -53,6 +55,7 @@ killall Dock'''
 
 		def mac_setDesktopImage(imagePath):
 			Popen(MAC_SET_SCRIPT%imagePath, shell=True)
+			log.info("desktop image set")
 
 		def mac_getDesktopImage():
 			p = Popen(MAC_GET_COMMAND, stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -64,12 +67,12 @@ killall Dock'''
 			clientPath = join_path(luanchdPath, "DesktopChangerClient.plist")
 			serverPath = join_path(luanchdPath, "DesktopChangerServer.plist")
 			if not os.path.exists(clientPath):
-				print "Creating Client Agent"
+				log.info("Creating Client Agent")
 				with open(clientPath, 'w') as client:
 					client.write(ClientXML % join_path(scriptPath, "client.py"))
 				os.chmod(clientPath, 0644)
 			if not os.path.exists(serverPath):
-				print "Creating Server Agent"
+				log.info("Creating Server Agent")
 				with open(serverPath, 'w') as client:
 					client.write(ServerXML % join_path(scriptPath, "daemon.py"))
 				os.chmod(serverPath, 0644)
@@ -89,7 +92,7 @@ killall Dock'''
 		#-----------------WIN--------------------------
 		#----------------------------------------------
 	elif platform == "win32":
-		print "Windows OS detected"
+		log.info("Windows OS detected")
 		import ctypes as windows_functions
 
 		def windows_setDesktopImage(imagePath):
@@ -102,11 +105,11 @@ killall Dock'''
 
 		def windows_createCronJobs():
 			if not os.path.exists(join_path(scriptPath, 'client.bat')):
-				print "Generating client.bat, please schedule a daily task for this batch file"
+				log.info("Generating client.bat, please schedule a daily task for this batch file")
 				with open('client.bat', 'w') as f:
 					f.write("python "+join_path(scriptPath, 'client.py') +" dailyUpdate")
 			if not os.path.exists(join_path(scriptPath, 'daemon.bat')):
-				print "Generating daemon.bat, please schedule a task to run on boot for this batch file"
+				log.info("Generating daemon.bat, please schedule a task to run on boot for this batch file")
 				with open('daemon.bat', 'w') as f:
 					f.write("start /B python "+join_path(scriptPath, 'client.py') +" dailyUpdate")
 
@@ -119,7 +122,7 @@ killall Dock'''
 		#-----------------Linux------------------------
 		#----------------------------------------------
 	elif platform == "linux" or platform == "linux2":
-		print "linux os detected"
+		log.info("linux os detected")
 		from crontab import CronTab
 
 		def linux_getCurrentImageName():
@@ -140,10 +143,10 @@ killall Dock'''
 			cron_client = CronTab()
 			iter =  cron_client.find_comment("Desktop Image Changer client")
 			try:
-				print "Client Cron Task Found"
+				log.info("Client Cron Task Found")
 				iter.next()
 			except StopIteration:
-				print 'Installing Client Cron Task'
+				log.info('Installing Client Cron Task')
 				job = cron_client.new(scriptPath+ "/client.py dailyUpdate",
 					comment="Desktop Image Changer client")
 				job.every().dom()
@@ -152,10 +155,10 @@ killall Dock'''
 			cron_daemon = CronTab()
 			iter =  cron_daemon.find_comment("Desktop Image Changer daemon")
 			try:
-				print "Daemon Cron Task Found"
+				log.info("Daemon Cron Task Found")
 				iter.next()
 			except StopIteration:
-				print 'Installing Daemon Cron Task'
+				log.info('Installing Daemon Cron Task')
 				job = cron_daemon.new(scriptPath+ "/daemon.py &",
 					comment="Desktop Image Changer daemon")
 				job.every_reboot()
@@ -169,5 +172,5 @@ killall Dock'''
 		return (linux_getCurrentImageName, linux_changeDesktopImage, linux_createCronJobs, linux_async_start)
 
 	else:
-		print "os not supported"
+		log.info("os not supported")
 		sys.exit(1)

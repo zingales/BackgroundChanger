@@ -1,7 +1,13 @@
 #!/usr/bin/python
 import socket, sys, os, urllib, urllib2, json, sqlite3, random, imghdr, time, traceback
+import datetime
+import logging
 from os.path import join as join_path
 import os_specific 
+
+logging.basicConfig(filename='daemon.log',level=logging.DEBUG)
+log = logging.getLogger(__name__)
+
 
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 # server_address = scriptDirectory + 'uds_socket'
@@ -31,7 +37,8 @@ last = time.time()-3600
 def start():
     #connect to db
     global conn
-    print 'Connecting To Pics DB'
+    log.info("===========================")
+    log.info('Connecting To Pics DB')
     conn = sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
     c = conn.cursor()
     c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
@@ -40,7 +47,7 @@ def start():
 
     dir_path = join_path(scriptDirectory, images_directory)
     if not os.path.exists(dir_path):
-        print "Created Image Directory: ", dir_path
+        log.info("Created Image Directory: %s" % dir_path)
         os.makedirs(dir_path)
     createCronJobs()
 
@@ -54,7 +61,7 @@ def start():
         try:
             # Receive the data in small chunks and retransmit it
             data = connection.recv(1024) #YUNO BLOCK!!!!
-            print 'received "%s"' % data
+            log.info('received "%s"' % data)
             if data == "":
                 continue
             handle(data)
@@ -75,7 +82,7 @@ def makeDomainSocket():
     # Create a UDS socket
     sock =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Bind the socket to the port
-    print 'Starting up socket listner on(%s, %s)' % server_address
+    log.info('Starting up socket listner on(%s, %s)' % server_address)
     sock.bind(server_address)
 
     sock.listen(1)
@@ -88,7 +95,7 @@ def makeDomainSocket():
 
 def pullPornImages(subreddit):
     #TODO: handle flickr with beautiful soup
-    print "Pulling from ", subreddit
+    log.info("Pulling from %s" % subreddit)
     url = 'failed on subreddit url'
     try:
         response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
@@ -99,11 +106,11 @@ def pullPornImages(subreddit):
             downloadImage(url,name, 1)
     except (urllib2.HTTPError, urllib2.URLError) as e:
         # traceback.format_exc()
-        print url
+        log.info(url)
         # print e.message
 
 def pullBingImages():
-    print 'Pulling from Bing image of the day'
+    log.info('Pulling from Bing image of the day')
     url =  'failed on bing url'
     try:
         response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
@@ -113,7 +120,7 @@ def pullBingImages():
             name =  image['startdate']
             downloadImage(url, name, 0)
     except (urllib2.HTTPError, urllib2.URLError) as e:
-        print "Exception was thrown", e, url
+        log.info("Exception was thrown %s %s" % (e, url))
         # traceback.format_exc()
 
 
@@ -138,7 +145,7 @@ def downloadImage(url, name, priority):
             os.unlink(path)
     # except (urllib.error.HTTPError, urllib.error.URLError) as e:
     except Exception as e:
-        print "Exception was thrown", e, url
+        log.info("Exception was thrown %s, %s" % (e, url))
         traceback.format_exc()
 
 
@@ -158,21 +165,22 @@ def handle(command):
         next()
     elif command == "dailyUpdate":
         if time.time() - last > 3600:
-            print "Running dailyUpdate at ", time.time()
+            log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
             next()
             last = time.time()
         else:
-            print "daily update watinging till", 3600-(time.time()-last), "seconds" 
+            log.info("daily update watinging till %d seconds" % (3600-(time.time()-last)))
     elif command == "quit":
         sys.exit(0)
     else:
-        print "command %s is not in the protocol" % command
+        log.info("command %s is not in the protocol" % command)
+    log.info("Handle Done")
 
 def next():
     pullBingImages()
     for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
         pullPornImages(subreddit)
-    print 'Done Pulling Images'
+    log.info('Done Updating Images')
     c = conn.cursor()
     array = []
     count = 0
@@ -180,25 +188,27 @@ def next():
         array = c.execute("select name, rowid from data where priority=? and ignore=0", (count,)).fetchall()
         count+=1
     if count > 5:
-        print "you have no fresh images"
+        log.info("you have no fresh images")
     selected = random.choice(array)
     name, id = selected
     c.execute("update data set priority=5 where rowid=?", (id,))
     conn.commit()
     path = genrate_path(name)
-    print "changing image"
+    log.info("changing image")
     setDesktopImage(path)
 
 def thumbsDown(imageName):
     c = conn.cursor()
     c.execute("update data set liked=-1,priority=99 where name=?",(imageName,))
     conn.commit()
+    log.info("Thumbed Down")
     next()
 
 def thumbsUp(imageName):
     c = conn.cursor()
     c.execute("update data set liked=1 where name=?",(imageName,))
     conn.commit()
+    log.info("Thumbed Up")
 
 
 
