@@ -3,13 +3,15 @@ import socket, sys, os, urllib, urllib2, json, sqlite3, random, imghdr, time, tr
 import datetime
 import logging
 from os.path import join as join_path
+
+#set up logging
+scriptDirectory = os.path.dirname(os.path.realpath(__file__))
+logging.basicConfig(filename=join_path(scriptDirectory, 'daemon.log'),level=logging.DEBUG)
+log = logging.getLogger("daemon")
+
 import os_specific 
 
-logging.basicConfig(filename='daemon.log',level=logging.DEBUG)
-log = logging.getLogger(__name__)
 
-
-scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 # server_address = scriptDirectory + 'uds_socket'
 server_address = ('localhost', 8888)
 images_directory = 'pics'
@@ -44,6 +46,7 @@ def start():
     c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
     conn.commit()
     sock = makeDomainSocket()
+    c.close()
 
     dir_path = join_path(scriptDirectory, images_directory)
     if not os.path.exists(dir_path):
@@ -147,6 +150,7 @@ def downloadImage(url, name, priority):
     except Exception as e:
         log.info("Exception was thrown %s, %s" % (e, url))
         traceback.format_exc()
+    cursor.close()
 
 
 def genrate_path(name):
@@ -193,6 +197,7 @@ def next():
     name, id = selected
     c.execute("update data set priority=5 where rowid=?", (id,))
     conn.commit()
+    c.close()
     path = genrate_path(name)
     log.info("changing image")
     setDesktopImage(path)

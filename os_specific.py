@@ -5,7 +5,7 @@ from subprocess import Popen, PIPE
 import logging
 
 scriptPath = os.path.dirname(os.path.realpath(__file__))
-log = logging.getLogger(__name__)
+log = logging.getLogger("os_specific")
 
 def load():
 
@@ -26,8 +26,13 @@ def load():
 		<string>%s</string>
 		<string>dailyUpdate</string>
 	</array>
-	<key>StartInterval</key>
-	<integer>86400</integer>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>0</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>
 </dict>
 </plist>'''
 
