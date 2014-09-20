@@ -116,7 +116,7 @@ killall Dock'''
 			if not os.path.exists(join_path(scriptPath, 'daemon.bat')):
 				log.info("Generating daemon.bat, please schedule a task to run on boot for this batch file")
 				with open('daemon.bat', 'w') as f:
-					f.write("start /B python "+join_path(scriptPath, 'client.py') +" dailyUpdate")
+					f.write("start /B python "+join_path(scriptPath, 'daemon.py'))
 
 		def windows_async_start():
 			pass
