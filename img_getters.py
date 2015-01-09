@@ -1,6 +1,7 @@
-import urllib2
+import urllib2, urllib
 import json
 import logging
+from HTMLParser import HTMLParser
 
 log = logging.getLogger("getters")
 
@@ -56,7 +57,66 @@ class SubredditGetter(UrlGetter):
       return []
       # print e.message
 
+class WallBaseMainParser(HTMLParser, object):
+  def __init__(self):
+    super(WallBaseMainParser, self).__init__()
+    self.tuples = []
+
+  def handle_starttag(self, tag, attrs):
+    link = None
+    if tag == 'a':
+      correct = False
+      for name, value in attrs:
+        if name == "class" and value == "preview":
+          correct = True
+        if name == "href":
+          link = value
+      if correct:
+        self.tuples.append(link)
+
+
+class WallBasePreviewParser(HTMLParser, object):
+  def __init__(self):
+    super(WallBasePreviewParser, self).__init__()
+    self.url = None
+  def handle_starttag(self, tag, attrs):
+    link = None
+    if tag == 'img':
+      correct = False
+      for name, value in attrs:
+        if name == "id" and value == "wallpaper":
+          correct = True
+        if name == "src":
+          link = value
+      if correct:
+        self.url = "http:" + link
+
 class WallbaseGetter(UrlGetter):
   # TODO learn to get from this url
-  #http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc
-  pass
+  def __init__(self):
+    #self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc'
+    self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&ratios=16x9&sorting=favorites&order=desc'
+
+  def get(self):
+    log.info('Pulling from WallHaven')
+    f = urllib.urlopen(self.main_url)
+    html = f.read()
+    p1 = WallBaseMainParser()
+    p1.feed(html)
+    tuples = []
+    for tup in p1.tuples:
+      tuples.append(self._get_image_link(tup))
+    return tuples
+
+
+  def _get_image_link(self, img_url):
+    name = img_url.split("/")[-1]
+    name = "wallhaven-"+name
+    f = urllib.urlopen(img_url)
+    html = f.read()
+    p1 = WallBasePreviewParser()
+    p1.feed(html)
+    return p1.url, name, 0
+
+if __name__ == '__main__':
+  print WallbaseGetter().get()

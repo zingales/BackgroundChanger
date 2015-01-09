@@ -1,7 +1,7 @@
 #!/usr/bin/python
 import logging
 from os.path import join as join_path
-import socket, sys, os, urllib, urllib2, json, sqlite3, random, imghdr, time, traceback
+import socket, sys, os, urllib, sqlite3, random, imghdr, time, traceback
 import datetime
 
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
@@ -71,7 +71,7 @@ class ImgDb(object):
     else:
       return False
 
-  def downloadImgaes(self, lst):
+  def importURLs(self, lst):
     '''
     :param lst: list has to be url, name, priority list
     :return:
@@ -153,7 +153,7 @@ def makeDomainSocket():
 # -----------------------------------------------
 # ----------------On Startup---------------------
 # -----------------------------------------------
-class daomon(object):
+class daemon(object):
   def __init__(self):
     self.last = time.time()-3600
     self.dir_path = join_path(scriptDirectory, images_directory)
@@ -221,8 +221,9 @@ class daomon(object):
     urls = []
     for getter in self.getters:
       urls.extend(getter.get())
-    self.db.downloadImgaes(urls)
-    log.info('Done Updating Images')
+    log.info('Done fetching images')
+    self.db.importURLs(urls)
+    log.info('Done saving images')
 
   def next(self):
     try:
@@ -237,9 +238,11 @@ class daomon(object):
     system.setDesktopImage(path)
 
 if __name__ == "__main__":
-  deamon = daomon()
+  deamon = daemon()
 
   deamon.add_getter(img_getters.BingGetter())
+  deamon.add_getter(img_getters.WallbaseGetter())
+
   for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
     deamon.add_getter(img_getters.SubredditGetter(subreddit))
 
