@@ -1,13 +1,16 @@
 #!/usr/bin/python
-import socket, sys, os, urllib, urllib2, json, sqlite3, random, imghdr, time, traceback
-import datetime
 import logging
 from os.path import join as join_path
-import os_specific
+import socket, sys, os, urllib, urllib2, json, sqlite3, random, imghdr, time, traceback
+import datetime
 
-#set up logging
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 logging.basicConfig(filename=join_path(scriptDirectory, 'daemon.log'),level=logging.DEBUG)
+
+#imports that require logging setup
+import os_specific
+import img_getters
+
 log = logging.getLogger("daemon")
 
 system = os_specific.load_system()
@@ -18,7 +21,6 @@ server_address = ('localhost', 8888)
 images_directory = 'pics'
 
 
-conn = None
 last = time.time()-3600
 #TODO: change schema so no two urls or names can be the same
 #db schema   name url liked-default-0 priority-defalut-0 ignore-default-0
@@ -31,48 +33,87 @@ last = time.time()-3600
 #requires crontab
 
 
+def genrate_path(self, name):
+      return join_path(scriptDirectory, images_directory, name)
+
 # (getDesktopImage, setDesktopImage, createCronJobs, asynch_start) = os_specific.load()
 
-
-# -----------------------------------------------
-# ----------------On Startup---------------------
-# -----------------------------------------------
-def start():
-    #connect to db
-    global conn
-    log.info("===========================")
-    log.info('Connecting To Pics DB')
-    conn = sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
-    c = conn.cursor()
+class ImgDb(object):
+  def __init__(self, img_dir_path):
+    self.conn = sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
+    c = self.conn.cursor()
     c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
-    conn.commit()
-    sock = makeDomainSocket()
+    self.conn.commit()
     c.close()
+    self.img_dir_path = img_dir_path
 
-    dir_path = join_path(scriptDirectory, images_directory)
-    if not os.path.exists(dir_path):
-        log.info("Created Image Directory: %s" % dir_path)
-        os.makedirs(dir_path)
-    system.createCronJobs()
+  def url_exist(self, url):
+    raise NotImplementedError()
 
-    #start socket
+  def downloadImgaes(self, lst):
+    '''
+    :param lst: list has to be url, name, priority list
+    :return:
+    '''
+    #todo make this do it all in one db connection instead of per image.
+    for tup in lst:
+      self._downloadImage(**tup)
 
-    while True:
-        # Wait for a connection
-        #TODO: when get info from client, handle it and close connection, wait to accept another
-        connection, client_address = sock.accept()
-        connection.settimeout(None)
-        try:
-            # Receive the data in small chunks and retransmit it
-            data = connection.recv(1024) #YUNO BLOCK!!!!
-            log.info('received "%s"' % data)
-            if data == "":
-                continue
-            handle(data)
-        finally:
-            # Clean up the connection
-            connection.close()
 
+  def select_image(self):
+    c = self.conn.cursor()
+    array = []
+    count = 0
+    while len(array) == 0:
+        array = c.execute("select name, rowid from data where priority=? and ignore=0", (count,)).fetchall()
+        count+=1
+    if count > 5:
+        log.info("you have no fresh images")
+    selected = random.choice(array)
+    name, id = selected
+    c.execute("update data set priority=5 where rowid=?", (id,))
+    self.conn.commit()
+    c.close()
+    return name
+
+
+
+  def _downloadImage(self,url, name, priority):
+      cursor = self.conn.cursor()
+      array = cursor.execute("select url from data where url=?", (url,)).fetchall()
+      # we've seen this image before
+      if len(array) != 0:
+          return
+      path = join_path(self.img_dir_path, name)
+      try:
+          urllib.urlretrieve(url, path)
+          fileExtension = imghdr.what(path)
+          if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
+              os.rename(path, path+'.'+fileExtension)
+              cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
+                  (name + '.' + fileExtension, url, priority))
+              self.conn.commit()
+          else:
+              cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
+                  (name, url, 1))
+              os.unlink(path)
+      # except (urllib.error.HTTPError, urllib.error.URLError) as e:
+      except Exception as e:
+          log.info("Exception was thrown %s, %s" % (e, url))
+          traceback.format_exc()
+      cursor.close()
+
+  def thumbsDown(self, imageName):
+      c = self.conn.cursor()
+      c.execute("update data set liked=-1,priority=99 where name=?",(imageName,))
+      self.conn.commit()
+      log.info("Thumbed Down")
+
+  def thumbsUp(self, imageName):
+      c = self.conn.cursor()
+      c.execute("update data set liked=1 where name=?",(imageName,))
+      self.conn.commit()
+      log.info("Thumbed Up")
 
 
 def makeDomainSocket():
@@ -91,135 +132,101 @@ def makeDomainSocket():
 
     sock.listen(1)
     return sock
+# -----------------------------------------------
+# ----------------On Startup---------------------
+# -----------------------------------------------
+class daomon(object):
+  def __init__(self):
+    self.dir_path = join_path(scriptDirectory, images_directory)
+
+    self.db = ImgDb(self.dir_path)
+    self.getters = []
+
+  def add_getter(self, getter):
+    self.getters.append(getter)
+
+  def run(self):
+    #connect to db
+    log.info("===========================")
+    log.info('Connecting To Pics DB')
+    sock = makeDomainSocket()
+
+    if not os.path.exists(self.dir_path):
+        log.info("Created Image Directory: %s" % self.dir_path)
+        os.makedirs(self.dir_path)
+    system.createCronJobs()
+
+    #start socket
+
+    while True:
+        # Wait for a connection
+        #TODO: when get info from client, handle it and close connection, wait to accept another
+        connection, client_address = sock.accept()
+        connection.settimeout(None)
+        try:
+            # Receive the data in small chunks and retransmit it
+            data = connection.recv(1024) #YUNO BLOCK!!!!
+            log.info('received "%s"' % data)
+            if data == "":
+                continue
+            self.handle(data)
+        finally:
+            # Clean up the connection
+            connection.close()
 
 
-#------------------------------------------------
-#------------------Utility-----------------------
-#------------------------------------------------
+  # ------------------------------------------------------
+  # ----------------- Commands From Client----------------
+  # ------------------------------------------------------
+  def handle(self, command):
+      global last
+      if command == "thumbsUp":
+          self.db.thumbsUp(system.getDesktopImage())
+      elif command == "thumbsDown":
+          self.db.thumbsDown(system.getDesktopImage())
+          self.next()
+      elif command == "next":
+          self.next()
+      elif command == "dailyUpdate":
+          if time.time() - last > 3600:
+              log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
+              next()
+              last = time.time()
+          else:
+              log.info("daily update waiting till %d seconds" % (3600-(time.time()-last)))
+      elif command == "quit":
+          sys.exit(0)
+      else:
+          log.info("command %s is not in the protocol" % command)
+      log.info("Handle Done")
 
-def pullPornImages(subreddit):
-    #TODO: handle flickr with beautiful soup
-    log.info("Pulling from %s" % subreddit)
-    url = 'failed on subreddit url'
-    try:
-        response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
-        data = json.load(response)
-        for child in data['data']['children']:
-            url = child['data']['url']
-            name = child['data']['subreddit_id'] + "-" +  child['data']['id']
-            downloadImage(url,name, 1)
-    except (urllib2.HTTPError, urllib2.URLError) as e:
-        # traceback.format_exc()
-        log.info(url)
-        # print e.message
-
-def pullBingImages():
-    log.info('Pulling from Bing image of the day')
-    url =  'failed on bing url'
-    try:
-        response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
-        data = json.load(response)
-        for image in data['images']:
-            url = 'http://www.bing.com' + image['url']
-            name =  image['startdate']
-            downloadImage(url, name, 0)
-    except (urllib2.HTTPError, urllib2.URLError) as e:
-        log.info("Exception was thrown %s %s" % (e, url))
-        # traceback.format_exc()
-
-
-def downloadImage(url, name, priority):
-    cursor = conn.cursor()
-    array = cursor.execute("select url from data where url=?", (url,)).fetchall()
-    # we've seen this image before
-    if len(array) != 0:
-        return
-    path = genrate_path(name)
-    try:
-        urllib.urlretrieve(url, path)
-        fileExtension = imghdr.what(path)
-        if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
-            os.rename(path, path+'.'+fileExtension)
-            cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
-                (name + '.' + fileExtension, url, priority))
-            conn.commit()
-        else:
-            cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
-                (name, url, 1))
-            os.unlink(path)
-    # except (urllib.error.HTTPError, urllib.error.URLError) as e:
-    except Exception as e:
-        log.info("Exception was thrown %s, %s" % (e, url))
-        traceback.format_exc()
-    cursor.close()
-
-
-def genrate_path(name):
-    return join_path(scriptDirectory, images_directory, name)
-
-# ------------------------------------------------------
-# ----------------- Commands From Client----------------
-# ------------------------------------------------------
-def handle(command):
-    global last
-    if command == "thumbsUp":
-        thumbsUp(system.getDesktopImage())
-    elif command == "thumbsDown":
-        thumbsDown(system.getDesktopImage())
-    elif command == "next":
-        next()
-    elif command == "dailyUpdate":
-        if time.time() - last > 3600:
-            log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
-            next()
-            last = time.time()
-        else:
-            log.info("daily update watinging till %d seconds" % (3600-(time.time()-last)))
-    elif command == "quit":
-        sys.exit(0)
-    else:
-        log.info("command %s is not in the protocol" % command)
-    log.info("Handle Done")
-
-def next():
-    pullBingImages()
-    for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
-        pullPornImages(subreddit)
+  def update(self):
+    urls = []
+    for getter in self.getters:
+      urls.extend(getter.get())
+    self.db.downloadImgaes(urls)
     log.info('Done Updating Images')
-    c = conn.cursor()
-    array = []
-    count = 0
-    while len(array) == 0:
-        array = c.execute("select name, rowid from data where priority=? and ignore=0", (count,)).fetchall()
-        count+=1
-    if count > 5:
-        log.info("you have no fresh images")
-    selected = random.choice(array)
-    name, id = selected
-    c.execute("update data set priority=5 where rowid=?", (id,))
-    conn.commit()
-    c.close()
-    path = genrate_path(name)
+
+  def next(self):
+    try:
+      self.update()
+    except as e:
+      log.info("Error trying to update")
+      log.exception(e)
+    name = self.db.select_image()
+
+    path = join_path(self.dir_path, name)
     log.info("changing image")
     system.setDesktopImage(path)
 
-def thumbsDown(imageName):
-    c = conn.cursor()
-    c.execute("update data set liked=-1,priority=99 where name=?",(imageName,))
-    conn.commit()
-    log.info("Thumbed Down")
-    next()
-
-def thumbsUp(imageName):
-    c = conn.cursor()
-    c.execute("update data set liked=1 where name=?",(imageName,))
-    conn.commit()
-    log.info("Thumbed Up")
-
-
-
 
 if __name__ == "__main__":
-    start()
+  deamon = daomon()
+
+  deamon.add_getter(img_getters.BingGetter())
+  for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
+    deamon.add_getter(img_getters.SubredditGetter(subreddit))
+
+  deamon.run()
     # path = "/Users/G/Pictures/Desktop/tree.jpg"
     # set_desktop_background(path)
