@@ -3,13 +3,14 @@ import socket, sys, os, urllib, urllib2, json, sqlite3, random, imghdr, time, tr
 import datetime
 import logging
 from os.path import join as join_path
+import os_specific
 
 #set up logging
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 logging.basicConfig(filename=join_path(scriptDirectory, 'daemon.log'),level=logging.DEBUG)
 log = logging.getLogger("daemon")
 
-import os_specific 
+system = os_specific.load_system()
 
 
 # server_address = scriptDirectory + 'uds_socket'
@@ -30,7 +31,7 @@ last = time.time()-3600
 #requires crontab
 
 
-(getDesktopImage, setDesktopImage, createCronJobs, asynch_start) = os_specific.load()
+# (getDesktopImage, setDesktopImage, createCronJobs, asynch_start) = os_specific.load()
 
 
 # -----------------------------------------------
@@ -52,7 +53,7 @@ def start():
     if not os.path.exists(dir_path):
         log.info("Created Image Directory: %s" % dir_path)
         os.makedirs(dir_path)
-    createCronJobs()
+    system.createCronJobs()
 
     #start socket
 
@@ -162,9 +163,9 @@ def genrate_path(name):
 def handle(command):
     global last
     if command == "thumbsUp":
-        thumbsUp(getDesktopImage())
+        thumbsUp(system.getDesktopImage())
     elif command == "thumbsDown":
-        thumbsDown(getDesktopImage())
+        thumbsDown(system.getDesktopImage())
     elif command == "next":
         next()
     elif command == "dailyUpdate":
@@ -200,7 +201,7 @@ def next():
     c.close()
     path = genrate_path(name)
     log.info("changing image")
-    setDesktopImage(path)
+    system.setDesktopImage(path)
 
 def thumbsDown(imageName):
     c = conn.cursor()
