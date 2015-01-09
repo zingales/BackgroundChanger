@@ -29,18 +29,20 @@ class BingGetter(UrlGetter):
       return tups
     except (urllib2.HTTPError, urllib2.URLError) as e:
       log.info("Exception was thrown %s %s" % (e, url))
+      return []
         # traceback.format_exc()
 
 class SubredditGetter(UrlGetter):
   def __init__(self, subreddit):
     self.subreddit = subreddit
+    self.main_url = "http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % self.subreddit
+
 
   def get(self):
     #TODO: handle flickr with beautiful soup
     log.info("Pulling from %s" % self.subreddit)
-    url = 'failed on subreddit url'
     try:
-      response = urllib2.urlopen("http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % subreddit)
+      response = urllib2.urlopen(self.main_url)
       data = json.load(response)
       tups = []
       for child in data['data']['children']:
@@ -50,5 +52,11 @@ class SubredditGetter(UrlGetter):
       return tups
     except (urllib2.HTTPError, urllib2.URLError) as e:
       # traceback.format_exc()
-      log.info(url)
+      log.info("failed pulling main url from %s" % self.subreddit)
+      return []
       # print e.message
+
+class WallbaseGetter(UrlGetter):
+  # TODO learn to get from this url
+  #http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc
+  pass

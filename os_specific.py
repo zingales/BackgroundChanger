@@ -84,8 +84,8 @@ killall Dock'''
       os.chmod(self.clientPath, 0644)
     if not os.path.exists(self.serverPath):
       log.info("Creating Server Agent")
-      with open(self.serverPath, 'w') as client:
-        client.write(self.ServerXML % join_path(scriptPath, "daemon.py"))
+      with open(self.serverPath, 'w') as server:
+        server.write(self.ServerXML % join_path(scriptPath, "daemon.py"))
       os.chmod(self.serverPath, 0644)
 
     #launch cron jobs

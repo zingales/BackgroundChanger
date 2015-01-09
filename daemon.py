@@ -21,7 +21,6 @@ server_address = ('localhost', 8888)
 images_directory = 'pics'
 
 
-last = time.time()-3600
 #TODO: change schema so no two urls or names can be the same
 #db schema   name url liked-default-0 priority-defalut-0 ignore-default-0
 # priority is the priority of when you want to see it, it will shows images with priority =0 before, priority=1
@@ -32,88 +31,107 @@ last = time.time()-3600
 
 #requires crontab
 
-
-def genrate_path(self, name):
-      return join_path(scriptDirectory, images_directory, name)
-
 # (getDesktopImage, setDesktopImage, createCronJobs, asynch_start) = os_specific.load()
 
 class ImgDb(object):
+
+
+  def _connect(self):
+    if self.deep ==0:
+      self.session = self.conn.cursor()
+    self.deep+=1
+    return self.session
+
+  def _disconnect(self):
+    self.deep-=1
+    if self.deep ==0:
+      self.conn.commit()
+      self.session.close()
+      self.session = None
+    return
+
   def __init__(self, img_dir_path):
     self.conn = sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
-    c = self.conn.cursor()
-    c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
-    self.conn.commit()
-    c.close()
+
     self.img_dir_path = img_dir_path
+    self.deep = 0
+    self.session = None
+
+    c = self._connect()
+    c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
+    self._disconnect()
 
   def url_exist(self, url):
-    raise NotImplementedError()
+    cursor = self._connect()
+    array = cursor.execute("select url from data where url=?", (url,)).fetchall()
+    # we've seen this image before
+    self._disconnect()
+    if len(array) != 0:
+        return True
+    else:
+      return False
 
   def downloadImgaes(self, lst):
     '''
     :param lst: list has to be url, name, priority list
     :return:
     '''
+
+    self._connect()
     #todo make this do it all in one db connection instead of per image.
     for tup in lst:
-      self._downloadImage(**tup)
-
+      self._downloadImage(*tup)
+    self._disconnect()
 
   def select_image(self):
-    c = self.conn.cursor()
+    c = self._connect()
     array = []
     count = 0
     while len(array) == 0:
-        array = c.execute("select name, rowid from data where priority=? and ignore=0", (count,)).fetchall()
-        count+=1
+      array = c.execute("select name, rowid from data where priority=? and ignore=0", (count,)).fetchall()
+      count+=1
     if count > 5:
-        log.info("you have no fresh images")
+      log.info("you have no fresh images")
     selected = random.choice(array)
     name, id = selected
     c.execute("update data set priority=5 where rowid=?", (id,))
-    self.conn.commit()
-    c.close()
+    self._disconnect()
     return name
 
-
-
   def _downloadImage(self,url, name, priority):
-      cursor = self.conn.cursor()
-      array = cursor.execute("select url from data where url=?", (url,)).fetchall()
-      # we've seen this image before
-      if len(array) != 0:
-          return
-      path = join_path(self.img_dir_path, name)
-      try:
-          urllib.urlretrieve(url, path)
-          fileExtension = imghdr.what(path)
-          if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
-              os.rename(path, path+'.'+fileExtension)
-              cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
-                  (name + '.' + fileExtension, url, priority))
-              self.conn.commit()
-          else:
-              cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
-                  (name, url, 1))
-              os.unlink(path)
-      # except (urllib.error.HTTPError, urllib.error.URLError) as e:
-      except Exception as e:
-          log.info("Exception was thrown %s, %s" % (e, url))
-          traceback.format_exc()
-      cursor.close()
+    if self.url_exist(url):
+      return
+    cursor = self._connect()
+    path = join_path(self.img_dir_path, name)
+    try:
+      urllib.urlretrieve(url, path)
+      fileExtension = imghdr.what(path)
+      if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
+        os.rename(path, path+'.'+fileExtension)
+        cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
+          (name + '.' + fileExtension, url, priority))
+        self.conn.commit()
+      else:
+        cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
+          (name, url, 1))
+        os.unlink(path)
+    # except (urllib.error.HTTPError, urllib.error.URLError) as e:
+    except Exception as e:
+        log.info("Exception was thrown %s, %s" % (e, url))
+        traceback.format_exc()
+    self._disconnect()
 
   def thumbsDown(self, imageName):
-      c = self.conn.cursor()
-      c.execute("update data set liked=-1,priority=99 where name=?",(imageName,))
-      self.conn.commit()
-      log.info("Thumbed Down")
+    c = self._connect()
+    c.execute("update data set liked=-1,priority=99 where name=?",(imageName,))
+    self._disconnect()
+    log.info("Thumbed Down")
 
   def thumbsUp(self, imageName):
-      c = self.conn.cursor()
-      c.execute("update data set liked=1 where name=?",(imageName,))
-      self.conn.commit()
-      log.info("Thumbed Up")
+    c = self._connect()
+    c.execute("update data set liked=1 where name=?",(imageName,))
+    self._disconnect()
+    log.info("Thumbed Up")
 
 
 def makeDomainSocket():
@@ -137,8 +155,8 @@ def makeDomainSocket():
 # -----------------------------------------------
 class daomon(object):
   def __init__(self):
+    self.last = time.time()-3600
     self.dir_path = join_path(scriptDirectory, images_directory)
-
     self.db = ImgDb(self.dir_path)
     self.getters = []
 
@@ -179,7 +197,6 @@ class daomon(object):
   # ----------------- Commands From Client----------------
   # ------------------------------------------------------
   def handle(self, command):
-      global last
       if command == "thumbsUp":
           self.db.thumbsUp(system.getDesktopImage())
       elif command == "thumbsDown":
@@ -188,12 +205,12 @@ class daomon(object):
       elif command == "next":
           self.next()
       elif command == "dailyUpdate":
-          if time.time() - last > 3600:
+          if time.time() - self.last > 3600:
               log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
-              next()
-              last = time.time()
+              self.next()
+              self.last = time.time()
           else:
-              log.info("daily update waiting till %d seconds" % (3600-(time.time()-last)))
+              log.info("daily update waiting till %d seconds" % (3600-(time.time()-self.last)))
       elif command == "quit":
           sys.exit(0)
       else:
@@ -210,7 +227,7 @@ class daomon(object):
   def next(self):
     try:
       self.update()
-    except as e:
+    except Exception as e:
       log.info("Error trying to update")
       log.exception(e)
     name = self.db.select_image()
@@ -218,7 +235,6 @@ class daomon(object):
     path = join_path(self.dir_path, name)
     log.info("changing image")
     system.setDesktopImage(path)
-
 
 if __name__ == "__main__":
   deamon = daomon()
@@ -228,5 +244,3 @@ if __name__ == "__main__":
     deamon.add_getter(img_getters.SubredditGetter(subreddit))
 
   deamon.run()
-    # path = "/Users/G/Pictures/Desktop/tree.jpg"
-    # set_desktop_background(path)
