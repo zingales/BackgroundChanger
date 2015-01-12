@@ -12,29 +12,38 @@ import os_specific
 import img_getters
 
 log = logging.getLogger("daemon")
-
 system = os_specific.load_system()
 
 
 # server_address = scriptDirectory + 'uds_socket'
 server_address = ('localhost', 8888)
 images_directory = 'pics'
+download_on_fetch = True
 
 
-#TODO: change schema so no two urls or names can be the same
+#TODO: 
 #db schema   name url liked-default-0 priority-defalut-0 ignore-default-0
 # priority is the priority of when you want to see it, it will shows images with priority =0 before, priority=1
 # 5 means that you've already displayed it.
 
-#TODO: save images with the correct file extension
-#TODO: change os importing, such that you don't need libraries that you don't need.
+#TODO: create update command (checks for images without changing the image),
+# add time stamp to update command
+# check to see if the image exists if it doens't not download it (allows for db synchornization)
+# create better batched commands
+# completely connect and disconnect from the db to allow dropbox to synchornize db
 
-#requires crontab
+class DBConnection(object):
 
-# (getDesktopImage, setDesktopImage, createCronJobs, asynch_start) = os_specific.load()
+  def __init__(self, dbimg):
+    self.db = dbimg
+
+  def __enter__(self):
+    return self.db._connect()
+
+  def __exit__(self ,type, value, traceback):
+    self.db._disconnect()
 
 class ImgDb(object):
-
 
   def _connect(self):
     if self.deep ==0:
@@ -51,25 +60,26 @@ class ImgDb(object):
     return
 
   def __init__(self, img_dir_path):
-    self.conn = sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
+
+    def gen_connection():
+      return sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
+
+    self.conn = gen_connection()
 
     self.img_dir_path = img_dir_path
     self.deep = 0
     self.session = None
+    self.download_on_fetch = True
 
-    c = self._connect()
-    c.execute('create table if not exists data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
-    self._disconnect()
+    with DBConnection(self) as c:
+      c.execute('CREATE TABLE IF NOT EXISTS  data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
+    self.selectedImagePriority = 5
 
   def url_exist(self, url):
-    cursor = self._connect()
-    array = cursor.execute("select url from data where url=?", (url,)).fetchall()
-    # we've seen this image before
-    self._disconnect()
-    if len(array) != 0:
-        return True
-    else:
-      return False
+    with DBConnection(self) as cursor:
+      array = cursor.execute("SELECT url FROM data WHERE url=?", (url,)).fetchall()
+      # we've seen this image before
+      return len(array) != 0
 
   def importURLs(self, lst):
     '''
@@ -77,62 +87,71 @@ class ImgDb(object):
     :return:
     '''
 
-    self._connect()
-    #todo make this do it all in one db connection instead of per image.
-    for tup in lst:
-      self._downloadImage(*tup)
-    self._disconnect()
+    with DBConnection(self) as cursor:
+      #todo make this do it all in one db connection instead of per image.
+      found_one = False
+      for tup in lst:
+        url, name, priority = tup
+        if not self.url_exist(url):
+          found_one = True
+          self.store_img_url(url, name, priority)
+          if self.download_on_fetch:
+            self.downloadImage(url, name)
+      return found_one
 
   def select_image(self):
-    c = self._connect()
-    array = []
-    count = 0
-    while len(array) == 0:
-      array = c.execute("select name, rowid from data where priority=? and ignore=0", (count,)).fetchall()
-      count+=1
-    if count > 5:
-      log.info("you have no fresh images")
-    selected = random.choice(array)
-    name, id = selected
-    c.execute("update data set priority=5 where rowid=?", (id,))
-    self._disconnect()
-    return name
+    with DBConnection(self) as c:
+      array = []
+      count = 0
+      while len(array) == 0:
+        array = c.execute("SELECT name, url, rowid FROM data WHERE priority=? AND ignore=0", (count,)).fetchall()
+        count+=1
+      if count > self.selectedImagePriority:
+        log.info("You have no fresh images")
+      selected = random.choice(array)
+      name, url, id = selected
+      if not self.downloadImage(url, name):
+        raise Exception("error trying to download image: %s" % (url, ))
 
-  def _downloadImage(self,url, name, priority):
+      c.execute("UPDATE data SET priority=? WHERE rowid=?", (self.selectedImagePriority, id))
+      return name
+
+  def store_img_url(self, url, name, priority):
+    with DBConnection(self) as cursor:
+      cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
+          (name, url, priority) )
+   
+  def downloadImage(self, url, name):
     if self.url_exist(url):
-      return
-    cursor = self._connect()
-    path = join_path(self.img_dir_path, name)
-    try:
-      urllib.urlretrieve(url, path)
-      fileExtension = imghdr.what(path)
-      if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
-        os.rename(path, path+'.'+fileExtension)
-        cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
-          (name + '.' + fileExtension, url, priority))
-        self.conn.commit()
-      else:
-        cursor.execute("INSERT INTO data (name, url, ignore) VALUES (?, ?, ?);",
-          (name, url, 1))
-        os.unlink(path)
-    # except (urllib.error.HTTPError, urllib.error.URLError) as e:
-    except Exception as e:
-        log.info("Exception was thrown %s, %s" % (e, url))
-        traceback.format_exc()
-    self._disconnect()
+      return True
+    with DBConnection(self) as cursor:
+      path = join_path(self.img_dir_path, name)
+      try:
+        urllib.urlretrieve(url, path)
+        fileExtension = imghdr.what(path)
+        if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
+          cursor.execute("UPDATE data SET name=? WHERE url=?;", (name + '.' + fileExtension, url) ) 
+          os.rename(path, path+'.'+fileExtension)
+        else:
+          cursor.execute("UPDATE data SET ignore=? WHERE url=?;", (1, url) )
+          os.unlink(path)
+          return False
+      except Exception as e:
+          log.info("Exception was thrown %s, %s" % (e, url))
+          traceback.format_exc()
+          return False
+
+      return True
 
   def thumbsDown(self, imageName):
-    c = self._connect()
-    c.execute("update data set liked=-1,priority=99 where name=?",(imageName,))
-    self._disconnect()
+    with DBConnection(self) as c:
+      c.execute("UPDATE data SET liked=-1,priority=99 WHERE name=?",(imageName,))
     log.info("Thumbed Down")
 
   def thumbsUp(self, imageName):
-    c = self._connect()
-    c.execute("update data set liked=1 where name=?",(imageName,))
-    self._disconnect()
+    with DBConnection(self) as c:
+      c.execute("UPDATE data SET liked=1 WHERE name=?",(imageName,))
     log.info("Thumbed Up")
-
 
 def makeDomainSocket():
     # Make sure the socket does not already exist
@@ -192,11 +211,11 @@ class daemon(object):
             # Clean up the connection
             connection.close()
 
-
   # ------------------------------------------------------
   # ----------------- Commands From Client----------------
   # ------------------------------------------------------
   def handle(self, command):
+    try:
       if command == "thumbsUp":
           self.db.thumbsUp(system.getDesktopImage())
       elif command == "thumbsDown":
@@ -204,6 +223,8 @@ class daemon(object):
           self.next()
       elif command == "next":
           self.next()
+      elif command == "update":
+        self.update()
       elif command == "dailyUpdate":
           if time.time() - self.last > 3600:
               log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
@@ -216,6 +237,9 @@ class daemon(object):
       else:
           log.info("command %s is not in the protocol" % command)
       log.info("Handle Done")
+    except Exception as e:
+      log.info("Error running handle")
+      log.exception(e)
 
   def update(self):
     urls = []
@@ -231,6 +255,7 @@ class daemon(object):
     except Exception as e:
       log.info("Error trying to update")
       log.exception(e)
+    #change image even if there is no internet
     name = self.db.select_image()
 
     path = join_path(self.dir_path, name)
@@ -241,9 +266,13 @@ if __name__ == "__main__":
   deamon = daemon()
 
   deamon.add_getter(img_getters.BingGetter())
-  deamon.add_getter(img_getters.WallbaseGetter())
 
   for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
     deamon.add_getter(img_getters.SubredditGetter(subreddit))
 
+  #wallbase getter is suuuuuper slow
+  deamon.add_getter(img_getters.WallbaseGetter())
+
+
   deamon.run()
+

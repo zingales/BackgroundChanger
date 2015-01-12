@@ -74,7 +74,6 @@ class WallBaseMainParser(HTMLParser, object):
       if correct:
         self.tuples.append(link)
 
-
 class WallBasePreviewParser(HTMLParser, object):
   def __init__(self):
     super(WallBasePreviewParser, self).__init__()
@@ -95,7 +94,7 @@ class WallbaseGetter(UrlGetter):
   # TODO learn to get from this url
   def __init__(self):
     #self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc'
-    self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&ratios=16x9&sorting=favorites&order=desc'
+    self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&sorting=favorites&order=desc&page=1'
 
   def get(self):
     log.info('Pulling from WallHaven')
