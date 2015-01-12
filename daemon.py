@@ -47,6 +47,7 @@ class ImgDb(object):
 
   def _connect(self):
     if self.deep ==0:
+      self.conn = self.gen_connection()
       self.session = self.conn.cursor()
     self.deep+=1
     return self.session
@@ -56,6 +57,7 @@ class ImgDb(object):
     if self.deep ==0:
       self.conn.commit()
       self.session.close()
+      self.conn.close()
       self.session = None
     return
 
@@ -64,7 +66,7 @@ class ImgDb(object):
     def gen_connection():
       return sqlite3.connect(join_path(scriptDirectory, 'desktopPics.db'))
 
-    self.conn = gen_connection()
+    self.gen_connection = gen_connection
 
     self.img_dir_path = img_dir_path
     self.deep = 0
@@ -217,25 +219,25 @@ class daemon(object):
   def handle(self, command):
     try:
       if command == "thumbsUp":
-          self.db.thumbsUp(system.getDesktopImage())
+        self.db.thumbsUp(system.getDesktopImage())
       elif command == "thumbsDown":
-          self.db.thumbsDown(system.getDesktopImage())
-          self.next()
+        self.db.thumbsDown(system.getDesktopImage())
+        self.next()
       elif command == "next":
-          self.next()
+        self.next()
       elif command == "update":
         self.update()
       elif command == "dailyUpdate":
-          if time.time() - self.last > 3600:
-              log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
-              self.next()
-              self.last = time.time()
-          else:
-              log.info("daily update waiting till %d seconds" % (3600-(time.time()-self.last)))
+        if time.time() - self.last > 3600:
+          log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
+          self.next()
+          self.last = time.time()
+        else:
+          log.info("daily update waiting till %d seconds" % (3600-(time.time()-self.last)))
       elif command == "quit":
-          sys.exit(0)
+        sys.exit(0)
       else:
-          log.info("command %s is not in the protocol" % command)
+        log.info("command %s is not in the protocol" % command)
       log.info("Handle Done")
     except Exception as e:
       log.info("Error running handle")
@@ -275,4 +277,6 @@ if __name__ == "__main__":
 
 
   deamon.run()
+
+
 
