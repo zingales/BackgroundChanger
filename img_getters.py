@@ -90,16 +90,22 @@ class WallBasePreviewParser(HTMLParser, object):
       if correct:
         self.url = "http:" + link
 
+
+def get_html(url):
+  header = {'User-agent' : 'Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.5) Gecko/20091102 Firefox/3.5.5'}
+  return urllib2.urlopen(urllib2.Request(url, None, header)).read()
+
 class WallbaseGetter(UrlGetter):
   # TODO learn to get from this url
+
   def __init__(self):
     #self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc'
     self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&sorting=favorites&order=desc&page=1'
 
   def get(self):
     log.info('Pulling from WallHaven')
-    f = urllib.urlopen(self.main_url)
-    html = f.read()
+    html = get_html(self.main_url)
+    # print "this html i got from main website", html
     p1 = WallBaseMainParser()
     p1.feed(html)
     tuples = []
@@ -111,8 +117,7 @@ class WallbaseGetter(UrlGetter):
   def _get_image_link(self, img_url):
     name = img_url.split("/")[-1]
     name = "wallhaven-"+name
-    f = urllib.urlopen(img_url)
-    html = f.read()
+    html = get_html(img_url)
     p1 = WallBasePreviewParser()
     p1.feed(html)
     return p1.url, name, 0
