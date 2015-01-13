@@ -32,6 +32,10 @@ download_on_fetch = True
 # create better batched commands
 # completely connect and disconnect from the db to allow dropbox to synchornize db
 
+def downloadImage(url, path):
+  pass
+  urllib.urlretrieve(url, path)
+
 class DBConnection(object):
 
   def __init__(self, dbimg):
@@ -88,7 +92,6 @@ class ImgDb(object):
     :param lst: list has to be url, name, priority list
     :return:
     '''
-
     with DBConnection(self) as cursor:
       #todo make this do it all in one db connection instead of per image.
       found_one = False
@@ -98,7 +101,7 @@ class ImgDb(object):
           found_one = True
           self.store_img_url(url, name, priority)
           if self.download_on_fetch:
-            self.downloadImage(url, name)
+            self.guaranteeImage(url, name)
       return found_one
 
   def select_image(self):
@@ -112,7 +115,7 @@ class ImgDb(object):
         log.info("You have no fresh images")
       selected = random.choice(array)
       name, url, id = selected
-      if not self.downloadImage(url, name):
+      if not self.guaranteeImage(url, name):
         raise Exception("error trying to download image: %s" % (url, ))
 
       c.execute("UPDATE data SET priority=? WHERE rowid=?", (self.selectedImagePriority, id))
@@ -122,19 +125,20 @@ class ImgDb(object):
     with DBConnection(self) as cursor:
       cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
           (name, url, priority) )
-   
-  def downloadImage(self, url, name):
+ 
+  def guaranteeImage(self, url, name):
     if self.url_exist(url):
       return True
     with DBConnection(self) as cursor:
       path = join_path(self.img_dir_path, name)
       try:
-        urllib.urlretrieve(url, path)
+        downloadImage(url, path)
         fileExtension = imghdr.what(path)
         if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
           cursor.execute("UPDATE data SET name=? WHERE url=?;", (name + '.' + fileExtension, url) ) 
           os.rename(path, path+'.'+fileExtension)
         else:
+          log.info("found bad image at " + url)
           cursor.execute("UPDATE data SET ignore=? WHERE url=?;", (1, url) )
           os.unlink(path)
           return False
@@ -156,13 +160,6 @@ class ImgDb(object):
     log.info("Thumbed Up")
 
 def makeDomainSocket():
-    # Make sure the socket does not already exist
-    # try:
-    #     os.unlink(server_address)
-    # except OSError:
-    #     if os.path.exists(server_address):
-    #         raise
-
     # Create a UDS socket
     sock =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Bind the socket to the port
@@ -205,7 +202,7 @@ class daemon(object):
         try:
             # Receive the data in small chunks and retransmit it
             data = connection.recv(1024) #YUNO BLOCK!!!!
-            log.info('received "%s"' % data)
+            log.debug('received "%s"' % data)
             if data == "":
                 continue
             self.handle(data)
@@ -247,8 +244,9 @@ class daemon(object):
     urls = []
     for getter in self.getters:
       urls.extend(getter.get())
-    log.info('Done fetching images')
-    self.db.importURLs(urls)
+      log.debug('Done fetching from ' + getter.name)
+      if not self.db.importURLs(urls):
+        log.debug('No fresh images from ' + getter.name)
     log.info('Done saving images')
 
   def next(self):
