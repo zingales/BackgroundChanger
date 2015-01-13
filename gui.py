@@ -51,6 +51,3 @@ if __name__ == "__main__":
     app = DesktopGui(None)
     app.title('Desktop Changer')
     app.mainloop()
-
-
-print "running gui"

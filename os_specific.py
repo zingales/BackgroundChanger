@@ -107,7 +107,6 @@ killall Dock'''
     serverPath = join_path(self.luanchdPath, "DesktopChangerServer.plist")
     Popen(['launchctl', 'load', serverPath])
 
-
 class WIN32(System):
   import ctypes as windows_functions
 
@@ -135,7 +134,6 @@ class WIN32(System):
 
   def async_start(self):
     pass
-
 
 class Linux(System):
   def __init__(self):
@@ -184,9 +182,6 @@ class Linux(System):
 
   def async_start(self):
     Popen(('python %s &' %  join_path(scriptDirectory, 'daemon.py')).split(' '))
-
-
-
 
 def load_system():
 

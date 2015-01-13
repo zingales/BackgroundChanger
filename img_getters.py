@@ -16,8 +16,12 @@ class UrlGetter(object):
     '''
 
 class BingGetter(UrlGetter):
+
+  def __init__(self):
+    self.name = "Bing"
+
   def get(self):
-    log.info('Pulling from Bing image of the day')
+    log.debug('Pulling from Bing image of the day')
     url =  'failed on bing url'
     try:
       response = urllib2.urlopen('http://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US')
@@ -36,12 +40,13 @@ class BingGetter(UrlGetter):
 class SubredditGetter(UrlGetter):
   def __init__(self, subreddit):
     self.subreddit = subreddit
+    self.name = subreddit
     self.main_url = "http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % self.subreddit
 
 
   def get(self):
     #TODO: handle flickr with beautiful soup
-    log.info("Pulling from %s" % self.subreddit)
+    log.debug("Pulling from %s" % self.subreddit)
     try:
       response = urllib2.urlopen(self.main_url)
       data = json.load(response)
@@ -90,7 +95,6 @@ class WallBasePreviewParser(HTMLParser, object):
       if correct:
         self.url = "http:" + link
 
-
 def get_html(url):
   header = {'User-agent' : 'Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.5) Gecko/20091102 Firefox/3.5.5'}
   return urllib2.urlopen(urllib2.Request(url, None, header)).read()
@@ -101,9 +105,10 @@ class WallbaseGetter(UrlGetter):
   def __init__(self):
     #self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc'
     self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&sorting=favorites&order=desc&page=1'
+    self.name = "wallhaven"
 
   def get(self):
-    log.info('Pulling from WallHaven')
+    log.debug('Pulling from WallHaven')
     html = get_html(self.main_url)
     # print "this html i got from main website", html
     p1 = WallBaseMainParser()
@@ -112,7 +117,6 @@ class WallbaseGetter(UrlGetter):
     for tup in p1.tuples:
       tuples.append(self._get_image_link(tup))
     return tuples
-
 
   def _get_image_link(self, img_url):
     name = img_url.split("/")[-1]
