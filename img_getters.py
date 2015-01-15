@@ -69,39 +69,6 @@ class SubredditGetter(UrlGetter):
       return []
       # print e.message
 
-class WallBaseMainParser(HTMLParser, object):
-  def __init__(self):
-    super(WallBaseMainParser, self).__init__()
-    self.tuples = []
-
-  def handle_starttag(self, tag, attrs):
-    link = None
-    if tag == 'a':
-      correct = False
-      for name, value in attrs:
-        if name == "class" and value == "preview":
-          correct = True
-        if name == "href":
-          link = value
-      if correct:
-        self.tuples.append(link)
-
-class WallBasePreviewParser(HTMLParser, object):
-  def __init__(self):
-    super(WallBasePreviewParser, self).__init__()
-    self.url = None
-  def handle_starttag(self, tag, attrs):
-    link = None
-    if tag == 'img':
-      correct = False
-      for name, value in attrs:
-        if name == "id" and value == "wallpaper":
-          correct = True
-        if name == "src":
-          link = value
-      if correct:
-        self.url = "http:" + link
-
 def get_html(url):
   header = {'User-agent' : 'Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.5) Gecko/20091102 Firefox/3.5.5'}
   return urllib2.urlopen(urllib2.Request(url, None, header)).read()
@@ -109,7 +76,41 @@ def get_html(url):
 class WallbaseGetter(UrlGetter):
   # TODO learn to get from this url
 
-  def __init__(self):
+  class WallBaseMainParser(HTMLParser, object):
+    def __init__(self):
+      super(WallbaseGetter.WallBaseMainParser, self).__init__()
+      self.tuples = []
+
+    def handle_starttag(self, tag, attrs):
+      link = None
+      if tag == 'a':
+        correct = False
+        for name, value in attrs:
+          if name == "class" and value == "preview":
+            correct = True
+          if name == "href":
+            link = value
+        if correct:
+          self.tuples.append(link)
+
+  class WallBasePreviewParser(HTMLParser, object):
+    def __init__(self):
+      super(WallbaseGetter.WallBasePreviewParser, self).__init__()
+      self.url = None
+    def handle_starttag(self, tag, attrs):
+      link = None
+      if tag == 'img':
+        correct = False
+        for name, value in attrs:
+          if name == "id" and value == "wallpaper":
+            correct = True
+          if name == "src":
+            link = value
+        if correct:
+          self.url = "http:" + link
+
+  def __init__(self, priority):
+    super(WallbaseGetter, self).__init__("wallhaven", priority)
     #self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc'
     self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&sorting=favorites&order=desc&page=1'
 
@@ -117,7 +118,7 @@ class WallbaseGetter(UrlGetter):
     log.debug('Pulling from WallHaven')
     html = get_html(self.main_url)
     # print "this html i got from main website", html
-    p1 = WallBaseMainParser()
+    p1 = WallbaseGetter.WallBaseMainParser()
     p1.feed(html)
     tuples = []
     for tup in p1.tuples:
@@ -128,7 +129,7 @@ class WallbaseGetter(UrlGetter):
     name = img_url.split("/")[-1]
     name = "wallhaven-"+name
     html = get_html(img_url)
-    p1 = WallBasePreviewParser()
+    p1 = WallbaseGetter.WallBasePreviewParser()
     p1.feed(html)
     return p1.url, name, 0
 
