@@ -61,7 +61,7 @@ class SubredditGetter(UrlGetter):
       for child in data['data']['children']:
         url = child['data']['url']
         name = child['data']['subreddit_id'] + "-" +  child['data']['id']
-        tups.append((url,name, 1))
+        tups.append((url,name, self.priority))
       return tups
     except (urllib2.HTTPError, urllib2.URLError) as e:
       # traceback.format_exc()
@@ -131,7 +131,7 @@ class WallbaseGetter(UrlGetter):
     html = get_html(img_url)
     p1 = WallbaseGetter.WallBasePreviewParser()
     p1.feed(html)
-    return p1.url, name, 0
+    return p1.url, name, self.priority
 
 #simple desktops
 #http://simpledesktops.com/browse/1/

@@ -33,7 +33,6 @@ download_on_fetch = True
 # completely connect and disconnect from the db to allow dropbox to synchornize db
 
 def downloadImage(url, path):
-  pass
   urllib.urlretrieve(url, path)
 
 class DBConnection(object):
@@ -121,16 +120,22 @@ class ImgDb(object):
       c.execute("UPDATE data SET priority=? WHERE rowid=?", (self.selectedImagePriority, id))
       return name
 
+  def get_valid_images(self):
+    with DBConnection(self) as cursor:
+      array = cursor.execute("SELECT name, url FROM data WHERE ignore=0 and liked!=-1", tuple() ).fetchall()
+      return array
+
+
   def store_img_url(self, url, name, priority):
     with DBConnection(self) as cursor:
       cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
           (name, url, priority) )
  
   def guaranteeImage(self, url, name):
-    if self.url_exist(url):
+    path = join_path(self.img_dir_path, name)
+    if os.path.exists(path):
       return True
     with DBConnection(self) as cursor:
-      path = join_path(self.img_dir_path, name)
       try:
         downloadImage(url, path)
         fileExtension = imghdr.what(path)
@@ -172,6 +177,7 @@ def makeDomainSocket():
 # ----------------On Startup---------------------
 # -----------------------------------------------
 class daemon(object):
+
   def __init__(self):
     self.last = time.time()-3600
     self.dir_path = join_path(scriptDirectory, images_directory)
