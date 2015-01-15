@@ -6,6 +6,12 @@ from HTMLParser import HTMLParser
 log = logging.getLogger("getters")
 
 class UrlGetter(object):
+
+  def __init__(self, name, priority):
+    self.priority = priority
+    self.name = name
+
+
   '''
   manages getting url.
   '''
@@ -17,8 +23,9 @@ class UrlGetter(object):
 
 class BingGetter(UrlGetter):
 
-  def __init__(self):
-    self.name = "Bing"
+  def __init__(self, priority):
+    super(BingGetter, self).__init__("Bing", priority)
+    
 
   def get(self):
     log.debug('Pulling from Bing image of the day')
@@ -30,7 +37,7 @@ class BingGetter(UrlGetter):
       for image in data['images']:
         url = 'http://www.bing.com' + image['url']
         name = image['startdate']
-        tups.append((url, name, 0))
+        tups.append((url, name, self.priority))
       return tups
     except (urllib2.HTTPError, urllib2.URLError) as e:
       log.info("Exception was thrown %s %s" % (e, url))
@@ -38,9 +45,9 @@ class BingGetter(UrlGetter):
         # traceback.format_exc()
 
 class SubredditGetter(UrlGetter):
-  def __init__(self, subreddit):
+  def __init__(self, subreddit, priority):
+    super(SubredditGetter, self).__init__(subreddit, priority)
     self.subreddit = subreddit
-    self.name = subreddit
     self.main_url = "http://www.reddit.com/r/%s/top/.json?sort=top&t=all" % self.subreddit
 
 
@@ -105,7 +112,6 @@ class WallbaseGetter(UrlGetter):
   def __init__(self):
     #self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc'
     self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&sorting=favorites&order=desc&page=1'
-    self.name = "wallhaven"
 
   def get(self):
     log.debug('Pulling from WallHaven')
@@ -126,5 +132,9 @@ class WallbaseGetter(UrlGetter):
     p1.feed(html)
     return p1.url, name, 0
 
+#simple desktops
+#http://simpledesktops.com/browse/1/
+
+
 if __name__ == '__main__':
-  print WallbaseGetter().get()
+  print WallbaseGetter(2).get()

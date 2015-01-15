@@ -265,13 +265,13 @@ class daemon(object):
 if __name__ == "__main__":
   deamon = daemon()
 
-  deamon.add_getter(img_getters.BingGetter())
+  deamon.add_getter(img_getters.BingGetter(3))
 
   for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
-    deamon.add_getter(img_getters.SubredditGetter(subreddit))
+    deamon.add_getter(img_getters.SubredditGetter(subreddit, 2))
 
   #wallbase getter is suuuuuper slow
-  deamon.add_getter(img_getters.WallbaseGetter())
+  deamon.add_getter(img_getters.WallbaseGetter(0))
 
 
   deamon.run()
