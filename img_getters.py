@@ -136,6 +136,37 @@ class WallbaseGetter(UrlGetter):
 #simple desktops
 #http://simpledesktops.com/browse/1/
 
+class SimpleDesktopGetter(UrlGetter):
+
+  class SimpleDesktopParser(HTMLParser, object):
+    def __init__(self):
+      super(SimpleDesktopGetter.SimpleDesktopParser, self).__init__()
+      self.tuples = []
+
+    def handle_starttag(self, tag, attrs):
+      if tag == 'img':
+        for name, value in attrs:
+          if name == "src" and value.startswith('http://static.simpledesktops.com/uploads/desktops/'):
+            self.tuples.append(value)
+
+  def __init__(self, priority):
+    super(SimpleDesktopGetter, self).__init__("SimpleDesktop", priority)
+    self.main_url = 'http://simpledesktops.com/browse/1/'
+
+  def get(self):
+    log.debug('Pulling from SimpleDesktop')
+    html = get_html(self.main_url)
+    p1 = SimpleDesktopGetter.SimpleDesktopParser()
+    tuples = []
+    p1.feed(html)
+    for link in p1.tuples:
+      elms = link.split(".")
+      elms = elms[:-2]
+      name = 'SimpleDesktop_'+elms[-2].split("/")[-1]
+      url = ".".join(elms)
+      tuples.append((url, name, self.priority))
+    return tuples
+
 
 if __name__ == '__main__':
-  print WallbaseGetter(2).get()
+  print SimpleDesktopGetter(1).get()

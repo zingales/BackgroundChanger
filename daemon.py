@@ -93,15 +93,15 @@ class ImgDb(object):
     '''
     with DBConnection(self) as cursor:
       #todo make this do it all in one db connection instead of per image.
-      found_one = False
+      count = 0
       for tup in lst:
         url, name, priority = tup
         if not self.url_exist(url):
-          found_one = True
+          count+=1
           self.store_img_url(url, name, priority)
           if self.download_on_fetch:
             self.guaranteeImage(url, name)
-      return found_one
+      return count
 
   def select_image(self):
     with DBConnection(self) as c:
@@ -230,6 +230,8 @@ class daemon(object):
         self.next()
       elif command == "update":
         self.update()
+      elif command == "forceDownload":
+        self.forceDownload()
       elif command == "dailyUpdate":
         if time.time() - self.last > 3600:
           log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
@@ -238,6 +240,7 @@ class daemon(object):
         else:
           log.info("daily update waiting till %d seconds" % (3600-(time.time()-self.last)))
       elif command == "quit":
+        log.info("quitting now")
         sys.exit(0)
       else:
         log.info("command %s is not in the protocol" % command)
@@ -254,6 +257,14 @@ class daemon(object):
       if not self.db.importURLs(urls):
         log.debug('No fresh images from ' + getter.name)
     log.info('Done saving images')
+
+  def forceDownload(self):
+    #download all valid images in database
+    log.info("getting all images in db")
+    for name, url in self.db.get_valid_images():
+      self.db.guaranteeImage(url, name)
+
+
 
   def next(self):
     try:
@@ -278,6 +289,8 @@ if __name__ == "__main__":
 
   #wallbase getter is suuuuuper slow
   deamon.add_getter(img_getters.WallbaseGetter(0))
+
+  deamon.add_getter(img_getters.SimpleDesktopGetter(1))
 
 
   deamon.run()
