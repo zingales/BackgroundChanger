@@ -3,3 +3,4 @@ uds_socket
 desktopPics.db
 *.pyc
 *.log
+nohup.out
