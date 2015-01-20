@@ -116,7 +116,7 @@ class WallbaseGetter(UrlGetter):
           self.url = "http:" + link
 
   def __init__(self, priority):
-    super(WallbaseGetter, self).__init__("wallhaven", priority)
+    super(WallbaseGetter, self).__init__("Wallhaven", priority)
     #self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=110&ratios=16x9&sorting=favorites&order=desc'
     self.main_url = 'http://alpha.wallhaven.cc/search?categories=111&purity=100&sorting=favorites&order=desc&page=1'
 

@@ -300,7 +300,7 @@ if __name__ == "__main__":
 
   deamon.add_getter(img_getters.BingGetter(3))
 
-  for subreddit in ['waterporn', 'fireporn', 'earthporn', 'cloudporn']:
+  for subreddit in ['Waterporn', 'Fireporn', 'Earthporn', 'Cloudporn']:
     deamon.add_getter(img_getters.SubredditGetter(subreddit, 2))
 
   #wallbase getter is suuuuuper slow
