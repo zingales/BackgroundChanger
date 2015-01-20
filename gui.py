@@ -24,28 +24,14 @@ class DesktopGui(Tkinter.Tk):
     def initialize(self):
         self.grid()
 
-        button = Tkinter.Button(self,text=u"Thumb Up", command=self.thumbUp)
+        button = Tkinter.Button(self,text=u"Thumb Up", command=client.thumbUp)
         button.grid(column=1,row=0)
 
-        button = Tkinter.Button(self,text=u"Next", command=self.next)
+        button = Tkinter.Button(self,text=u"Next", command=client.next)
         button.grid(column=2,row=0)
 
-        button = Tkinter.Button(self,text=u"Thumb Down", command=self.thumbDown)
+        button = Tkinter.Button(self,text=u"Thumb Down", command=client.thumbDown)
         button.grid(column=3,row=0)
-
-
-
-    def thumbUp(self):
-    	client.handle("thumbsUp")
-
-    def thumbDown(self):
-    	client.handle("thumbsDown")
-
-    def next(self):
-    	client.handle("next")
-
-    def update(self):
-    	client.handle("update")
 
 if __name__ == "__main__":
     app = DesktopGui(None)

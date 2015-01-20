@@ -16,13 +16,13 @@ def sendMessage(message):
     try:
         sock.connect(socket_address)
     except socket.error, msg:
-        print msg
-        sys.exit(1)
 
+        return False
     try:
         # Send data
         print 'sending "%s"' % message
         sock.sendall(message)
+        return True
     finally:
         sock.close()
 
@@ -33,7 +33,20 @@ def handle(command):
         import daemon 
         daemon.load_system().asynch_start()
     else:
-        sendMessage(command)
+        return sendMessage(command)
+
+
+def thumbUp():
+    return handle("thumbsUp")
+
+def thumbDown():
+    return handle("thumbsDown")
+
+def next():
+    return handle("next")
+
+def update():
+    return handle("update")
 
 def main():
     handle(sys.argv[1])

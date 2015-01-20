@@ -2,6 +2,9 @@ import urllib2, urllib
 import json
 import logging
 from HTMLParser import HTMLParser
+from collections import namedtuple
+
+ImgInfo = namedtuple('ImgInfo', 'url name priority source')
 
 log = logging.getLogger("getters")
 
@@ -36,8 +39,10 @@ class BingGetter(UrlGetter):
       tups = []
       for image in data['images']:
         url = 'http://www.bing.com' + image['url']
-        name = image['startdate']
-        tups.append((url, name, self.priority))
+        name = 'Bing-'+image['startdate']
+        # tups.append((url, name, self.priority))
+        info = ImgInfo(url, name, self.priority, self.name)
+        tups.append(info)
       return tups
     except (urllib2.HTTPError, urllib2.URLError) as e:
       log.info("Exception was thrown %s %s" % (e, url))
@@ -61,7 +66,8 @@ class SubredditGetter(UrlGetter):
       for child in data['data']['children']:
         url = child['data']['url']
         name = child['data']['subreddit_id'] + "-" +  child['data']['id']
-        tups.append((url,name, self.priority))
+        info = ImgInfo(url, name, self.priority, self.subreddit)
+        tups.append(info)
       return tups
     except (urllib2.HTTPError, urllib2.URLError) as e:
       # traceback.format_exc()
@@ -131,7 +137,7 @@ class WallbaseGetter(UrlGetter):
     html = get_html(img_url)
     p1 = WallbaseGetter.WallBasePreviewParser()
     p1.feed(html)
-    return p1.url, name, self.priority
+    return ImgInfo(p1.url, name, self.priority, self.name)
 
 #simple desktops
 #http://simpledesktops.com/browse/1/
@@ -162,9 +168,10 @@ class SimpleDesktopGetter(UrlGetter):
     for link in p1.tuples:
       elms = link.split(".")
       elms = elms[:-2]
-      name = 'SimpleDesktop_'+elms[-2].split("/")[-1]
+      name = 'SimpleDesktop-'+elms[-2].split("/")[-1]
       url = ".".join(elms)
-      tuples.append((url, name, self.priority))
+      info = ImgInfo(url, name, self.priority, self.name)
+      tuples.append(info)
     return tuples
 
 

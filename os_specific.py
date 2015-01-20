@@ -26,26 +26,26 @@ class System(object):
 
 class OSX(System):
 
-  ClientXML = '''<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>desktopChanger.client</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>%s</string>
-		<string>dailyUpdate</string>
-	</array>
-	<key>StartCalendarInterval</key>
-	<dict>
-		<key>Hour</key>
-		<integer>0</integer>
-		<key>Minute</key>
-		<integer>0</integer>
-	</dict>
-</dict>
-</plist>'''
+#   ClientXML = '''<?xml version="1.0" encoding="UTF-8"?>
+# <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+# <plist version="1.0">
+# <dict>
+# 	<key>Label</key>
+# 	<string>desktopChanger.client</string>
+# 	<key>ProgramArguments</key>
+# 	<array>
+# 		<string>%s</string>
+# 		<string>dailyUpdate</string>
+# 	</array>
+# 	<key>StartCalendarInterval</key>
+# 	<dict>
+# 		<key>Hour</key>
+# 		<integer>0</integer>
+# 		<key>Minute</key>
+# 		<integer>0</integer>
+# 	</dict>
+# </dict>
+# </plist>'''
 
   ServerXML = '''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -77,11 +77,11 @@ killall Dock'''
 
   def createCronJobs(self):
     #create cron jobs that doen't exist
-    if not os.path.exists(self.clientPath):
-      log.info("Creating Client Agent")
-      with open(self.clientPath, 'w') as client:
-        client.write(self.ClientXML % join_path(scriptPath, "client.py"))
-      os.chmod(self.clientPath, 0644)
+    # if not os.path.exists(self.clientPath):
+      # log.info("Creating Client Agent")
+      # with open(self.clientPath, 'w') as client:
+      #   client.write(self.ClientXML % join_path(scriptPath, "client.py"))
+      # os.chmod(self.clientPath, 0644)
     if not os.path.exists(self.serverPath):
       log.info("Creating Server Agent")
       with open(self.serverPath, 'w') as server:
@@ -89,7 +89,7 @@ killall Dock'''
       os.chmod(self.serverPath, 0644)
 
     #launch cron jobs
-    Popen(['launchctl','load', self.clientPath])
+    # Popen(['launchctl','load', self.clientPath])
 
   def setDesktopImage(self,imagePath):
     Popen(self.MAC_SET_SCRIPT%imagePath, shell=True)

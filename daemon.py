@@ -1,8 +1,10 @@
-#!/usr/bin/python
+#!/usr/local/bin/python
 import logging
 from os.path import join as join_path
 import socket, sys, os, urllib, sqlite3, random, imghdr, time, traceback
 import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
+
 
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
 logging.basicConfig(filename=join_path(scriptDirectory, 'daemon.log'),level=logging.DEBUG)
@@ -77,7 +79,7 @@ class ImgDb(object):
     self.download_on_fetch = True
 
     with DBConnection(self) as c:
-      c.execute('CREATE TABLE IF NOT EXISTS  data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0)')
+      c.execute('CREATE TABLE IF NOT EXISTS  data (name text, url text primary key, liked integer default 0, priority integer default 0, ignore integer default 0, source text)')
     self.selectedImagePriority = 5
 
   def url_exist(self, url):
@@ -94,13 +96,12 @@ class ImgDb(object):
     with DBConnection(self) as cursor:
       #todo make this do it all in one db connection instead of per image.
       count = 0
-      for tup in lst:
-        url, name, priority = tup
-        if not self.url_exist(url):
+      for info in lst:
+        if not self.url_exist(info.url):
           count+=1
-          self.store_img_url(url, name, priority)
+          self.store_img_url(info)
           if self.download_on_fetch:
-            self.guaranteeImage(url, name)
+            self.guaranteeImage(info.url, info.name)
       return count
 
   def select_image(self):
@@ -126,10 +127,12 @@ class ImgDb(object):
       return array
 
 
-  def store_img_url(self, url, name, priority):
+  def store_img_url(self, info):
+    assert instanceof(info, img_getters.ImgInfo)
+    # url, name, priority):
     with DBConnection(self) as cursor:
-      cursor.execute("INSERT INTO data (name, url, priority) VALUES (?, ?, ?);",
-          (name, url, priority) )
+      cursor.execute("INSERT INTO data (name, url, priority, source) VALUES (?, ?, ?, ?);",
+          (info.name, info.url, info.priority, info.source) )
  
   def guaranteeImage(self, url, name):
     path = join_path(self.img_dir_path, name)
@@ -153,6 +156,12 @@ class ImgDb(object):
           return False
 
       return True
+
+  def info(self, imageName):
+    with DBConnection(self) as c:
+      array = c.execute("SELECT url, liked, source, priority FROM data WHERE name=?", (imageName,) ).fetchall()
+      url, liked , source, priority= array[0]
+      log.info("info about image %s : source=%s, liked=%s, url=%s, priority=%s" % (imageName, source, liked, priority, url) )
 
   def thumbsDown(self, imageName):
     with DBConnection(self) as c:
@@ -179,10 +188,17 @@ def makeDomainSocket():
 class daemon(object):
 
   def __init__(self):
-    self.last = time.time()-3600
+    self.updateInterval = 3600 * 10
+    self.nextInterval = 3600*24
+    #in the past when the computer woke from sleep it would fire alot of missed scheduled tasks
+    # this is coalesce them all into one
+    self.cooldown = min(1800, self.updateInterval, self.nextInterval)
+    self.lastUpdate = time.time()-self.cooldown
+    self.lastNext = time.time()-self.cooldown
     self.dir_path = join_path(scriptDirectory, images_directory)
     self.db = ImgDb(self.dir_path)
     self.getters = []
+    self.scheduler = BackgroundScheduler()
 
   def add_getter(self, getter):
     self.getters.append(getter)
@@ -198,8 +214,16 @@ class daemon(object):
         os.makedirs(self.dir_path)
     system.createCronJobs()
 
-    #start socket
+    #add update tasks
+    self.scheduler.add_job(self.next, 'interval', 
+      seconds=self.nextInterval, id='update job', coalesce=True, max_instances=1)
+    self.scheduler.add_job(self.update, 'interval', 
+      seconds=self.updateInterval, id='next job', coalesce=True, max_instances=1)
+    
+    log.info("starting scheduler")
+    self.scheduler.start()    
 
+    #start socket
     while True:
         # Wait for a connection
         #TODO: when get info from client, handle it and close connection, wait to accept another
@@ -208,13 +232,14 @@ class daemon(object):
         try:
             # Receive the data in small chunks and retransmit it
             data = connection.recv(1024) #YUNO BLOCK!!!!
-            log.debug('received "%s"' % data)
             if data == "":
                 continue
+            log.debug('received "%s"' % data)
             self.handle(data)
         finally:
             # Clean up the connection
             connection.close()
+
 
   # ------------------------------------------------------
   # ----------------- Commands From Client----------------
@@ -226,21 +251,17 @@ class daemon(object):
       elif command == "thumbsDown":
         self.db.thumbsDown(system.getDesktopImage())
         self.next()
+      elif command == "info":
+        self.db.info(system.getDesktopImage())
       elif command == "next":
         self.next()
       elif command == "update":
         self.update()
       elif command == "forceDownload":
         self.forceDownload()
-      elif command == "dailyUpdate":
-        if time.time() - self.last > 3600:
-          log.info("Running dailyUpdate at %s" % datetime.datetime.now().strftime("%H:%M:%S %d,%m,%y"))
-          self.next()
-          self.last = time.time()
-        else:
-          log.info("daily update waiting till %d seconds" % (3600-(time.time()-self.last)))
       elif command == "quit":
         log.info("quitting now")
+        self.scheduler.shutdown()
         sys.exit(0)
       else:
         log.info("command %s is not in the protocol" % command)
@@ -267,11 +288,6 @@ class daemon(object):
 
 
   def next(self):
-    try:
-      self.update()
-    except Exception as e:
-      log.info("Error trying to update")
-      log.exception(e)
     #change image even if there is no internet
     name = self.db.select_image()
 
