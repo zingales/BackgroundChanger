@@ -1,4 +1,5 @@
 import os
+import sys
 from sys import platform, exit
 from os.path import join as join_path
 from subprocess import Popen, PIPE
@@ -112,17 +113,19 @@ class WIN32(System):
 
   def __init__(self):
     self.lastImage = "unknown"
+    self.windows_startup_dir = os.path.expanduser("~\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup")
     pass
 
   def createCronJobs(self):
-    if not os.path.exists(join_path(scriptPath, 'client.bat')):
-      log.info("Generating client.bat, please schedule a daily task for this batch file")
-      with open('client.bat', 'w') as f:
-        f.write("python "+join_path(scriptPath, 'client.py') +" dailyUpdate")
-    if not os.path.exists(join_path(scriptPath, 'daemon.bat')):
-      log.info("Generating daemon.bat, please schedule a task to run on boot for this batch file")
-      with open('daemon.bat', 'w') as f:
-        f.write("start /B python "+join_path(scriptPath, 'daemon.py'))
+    # if not os.path.exists(join_path(scriptPath, 'client.bat')):
+    #   log.info("Generating client.bat, please schedule a daily task for this batch file")
+    #   with open('client.bat', 'w') as f:
+    #     f.write("python "+join_path(scriptPath, 'client.py') +" dailyUpdate")
+    batch_path = join_path(self.windows_startup_dir, 'daemon.bat')
+    if not os.path.exists(batch_path):
+      log.info("Generating daemon.bat")
+      with open(batch_path, 'w') as f:
+        f.write("start " + sys.executable + " " + join_path(scriptPath, 'daemon.py'))
 
   def setDesktopImage(self, imagePath):
     self.lastImage = imagePath
