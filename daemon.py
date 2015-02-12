@@ -111,10 +111,14 @@ class ImgDb(object):
       while len(array) == 0:
         array = c.execute("SELECT name, url, rowid FROM data WHERE priority=? AND ignore=0", (count,)).fetchall()
         count+=1
+        if count > self.selectedImagePriority*2:
+          log.error("you have like no images in your database")
+          raise Exception("no images")
       if count > self.selectedImagePriority:
         log.info("You have no fresh images")
       selected = random.choice(array)
       name, url, id = selected
+      log.debug("selected image name " + name)
       if not self.guaranteeImage(url, name):
         raise Exception("error trying to download image: %s" % (url, ))
 
@@ -143,8 +147,10 @@ class ImgDb(object):
         downloadImage(url, path)
         fileExtension = imghdr.what(path)
         if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
-          cursor.execute("UPDATE data SET name=? WHERE url=?;", (name + '.' + fileExtension, url) ) 
-          os.rename(path, path+'.'+fileExtension)
+          if not path.endswith(fileExtension):
+            cursor.execute("UPDATE data SET name=? WHERE url=?;", (name + '.' + fileExtension, url) ) 
+            os.rename(path, path+'.'+fileExtension)
+          log.debug("downloaded image to path " + path)
         else:
           log.info("found bad image at " + url)
           cursor.execute("UPDATE data SET ignore=? WHERE url=?;", (1, url) )
