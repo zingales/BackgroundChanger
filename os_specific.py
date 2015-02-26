@@ -144,7 +144,7 @@ class Linux(System):
 
   from crontab import CronTab
 
-  def getCurrentImageName(self):
+  def getDesktopImage(self):
     command ="gsettings get org.gnome.desktop.background picture-uri".split(" ")
     p = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     uri, _ =  p.communicate()
@@ -152,7 +152,7 @@ class Linux(System):
     return name
     #uri is of the form file:///path/to/file
 
-  def changeDesktopImage(self,imagePath):
+  def setDesktopImage(self,imagePath):
     command = "gsettings set org.gnome.desktop.background picture-uri file://%s" % imagePath
     command = command.split(" ")
     Popen(command)
