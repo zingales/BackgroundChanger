@@ -4,6 +4,7 @@ from os.path import join as join_path
 import socket, sys, os, urllib, sqlite3, random, imghdr, time, traceback
 import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 
 scriptDirectory = os.path.dirname(os.path.realpath(__file__))
@@ -18,12 +19,12 @@ system = os_specific.load_system()
 
 
 # server_address = scriptDirectory + 'uds_socket'
-server_address = ('localhost', 8888)
+server_address = ('localhost', 9997)
 images_directory = 'pics'
 download_on_fetch = True
 
 
-#TODO: 
+#TODO:
 #db schema   name url liked-default-0 priority-defalut-0 ignore-default-0
 # priority is the priority of when you want to see it, it will shows images with priority =0 before, priority=1
 # 5 means that you've already displayed it.
@@ -132,12 +133,11 @@ class ImgDb(object):
 
 
   def store_img_url(self, info):
-    assert instanceof(info, img_getters.ImgInfo)
     # url, name, priority):
     with DBConnection(self) as cursor:
       cursor.execute("INSERT INTO data (name, url, priority, source) VALUES (?, ?, ?, ?);",
           (info.name, info.url, info.priority, info.source) )
- 
+
   def guaranteeImage(self, url, name):
     path = join_path(self.img_dir_path, name)
     if os.path.exists(path):
@@ -221,11 +221,11 @@ class daemon(object):
     system.createCronJobs()
 
     #add update tasks
-    self.scheduler.add_job(self.next, 'interval',
-      seconds=self.nextInterval, id='update job', coalesce=True, max_instances=1)
-    self.scheduler.add_job(self.update, 'interval',
-      seconds=self.updateInterval, id='next job', coalesce=True, max_instances=1)
-
+    ONE_DAY = 24*3600
+    self.scheduler.add_job(self.next, 'cron', hour=0, misfire_grace_time=ONE_DAY,
+      id='update job', coalesce=True, max_instances=1)
+    self.scheduler.add_job(self.update, 'cron', hour=0, misfire_grace_time=ONE_DAY,
+      id='next job', coalesce=True, max_instances=1)
     log.info("starting scheduler")
     self.scheduler.start()
 

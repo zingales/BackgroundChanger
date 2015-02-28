@@ -4,7 +4,7 @@ import sys
 import os
 from subprocess import Popen
 
-socket_address = ('localhost', 8888)
+socket_address = ('localhost', 9997)
 #TODO get freedback
 
 def sendMessage(message):
