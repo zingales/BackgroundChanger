@@ -132,7 +132,7 @@ class ImgDb(object):
 
 
   def store_img_url(self, info):
-    assert instanceof(info, img_getters.ImgInfo)
+    assert isinstance(info, img_getters.ImgInfo)
     # url, name, priority):
     with DBConnection(self) as cursor:
       cursor.execute("INSERT INTO data (name, url, priority, source) VALUES (?, ?, ?, ?);",
