@@ -148,7 +148,7 @@ class ImgDb(object):
         fileExtension = imghdr.what(path)
         if fileExtension in ['jpg',  'jpeg', 'gif', 'png']:
           if not path.endswith(fileExtension):
-            cursor.execute("UPDATE data SET name=? WHERE url=?;", (name + '.' + fileExtension, url) ) 
+            cursor.execute("UPDATE data SET name=? WHERE url=?;", (name + '.' + fileExtension, url) )
             os.rename(path, path+'.'+fileExtension)
           log.debug("downloaded image to path " + path)
         else:
@@ -221,13 +221,13 @@ class daemon(object):
     system.createCronJobs()
 
     #add update tasks
-    self.scheduler.add_job(self.next, 'interval', 
+    self.scheduler.add_job(self.next, 'interval',
       seconds=self.nextInterval, id='update job', coalesce=True, max_instances=1)
-    self.scheduler.add_job(self.update, 'interval', 
+    self.scheduler.add_job(self.update, 'interval',
       seconds=self.updateInterval, id='next job', coalesce=True, max_instances=1)
-    
+
     log.info("starting scheduler")
-    self.scheduler.start()    
+    self.scheduler.start()
 
     #start socket
     while True:

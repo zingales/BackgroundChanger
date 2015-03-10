@@ -30,7 +30,7 @@ def handle(command):
     #TODO: check if client already started
     #TODO: figure out why you have to press enter every time for new line
     if command == "start":
-        import daemon 
+        import daemon
         daemon.load_system().asynch_start()
     else:
         return sendMessage(command)
