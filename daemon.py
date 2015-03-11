@@ -222,10 +222,10 @@ class daemon(object):
 
     #add update tasks
     ONE_DAY = 24*3600
-    self.scheduler.add_job(self.next, 'cron', hour=0, misfire_grace_time=ONE_DAY,
-      id='update job', coalesce=True, max_instances=1)
-    self.scheduler.add_job(self.update, 'cron', hour=0, misfire_grace_time=ONE_DAY,
-      id='next job', coalesce=True, max_instances=1)
+    self.scheduler.add_job(self.next, 'cron', hour=0, misfire_grace_time=ONE_DAY, id='next job', 
+            coalesce=True, max_instances=1)
+    self.scheduler.add_job(self.update, 'interval', seconds=self.updateInterval, id='update job', 
+            misfire_grace_time=self.updateInterval, coalesce=True, max_instances=1)
     log.info("starting scheduler")
     self.scheduler.start()
 
